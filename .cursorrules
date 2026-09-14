@@ -1,0 +1,17 @@
+# Project: Grok-Powered WordPress Automation Engine (Phases 1-3)
+
+## Core Architectural Goal
+Build a self-hosted Node.js / Next.js web application that takes a client's WordPress credentials, hosting details, custom theme zip, and business brief, and automatically builds, populates, and optimizes a full multi-page WordPress website using the xAI (Grok) API.
+
+## System Workflow Pipeline
+1. Dashboard Setup: User configures xAI API Key, WP REST Credentials, SSH/SFTP Credentials, Business Brief, and uploads a target WordPress Theme (.zip).
+2. Theme Deployment & Site Setup (Phase 1): Upload and activate theme zip via SFTP/WP-CLI. Verify WP REST API connection and scaffold draft pages (Home, About, Services, Contact, FAQ).
+3. Universal Content Population (Phase 2): Grok API generates responsive, theme-agnostic semantic HTML (sections, grids, headings, CTAs) per page using the business brief.
+4. SEO Validation & Publishing (Phase 3): Grok inspects HTML for H1/H2 hierarchy, key phrase placement, meta title/description limits, and image alt text. Injects metadata and sets page status to "publish".
+
+## Stack & Conventions
+- Framework: Next.js (App Router), TypeScript, Tailwind CSS, Lucide Icons.
+- Storage/State: Prisma with SQLite (for local credential and job state persistence).
+- AI Client: Official OpenAI SDK pointed to xAI Base URL (`https://api.x.ai/v1`) using `grok-2` model.
+- WordPress Protocol: Standard WP REST API (`/wp-json/wp/v2/`) using Application Passwords, combined with Node `ssh2`/`sftp` for zip theme deployments.
+- Styling Strategy: Responsive, modern theme-agnostic semantic HTML (no block-editor comments or proprietary page-builder tags).

@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SiteStatus {
+  IDLE
+  SETTING_UP
+  POPULATING
+  PUBLISHING
+  COMPLETED
+  FAILED
+}
+
+model SiteConfig {
+  id              String     @id @default(cuid())
+  xaiApiKey       String
+  wpUrl           String
+  wpUsername      String
+  wpAppPassword   String
+  sftpHost        String?
+  sftpPort        String?
+  sftpUsername    String?
+  sftpPassword    String?
+  businessName    String
+  niche           String
+  targetAudience  String
+  toneOfVoice     String
+  coreServices    Json
+  targetKeywords  Json
+  pagesToBuild    Json       @default("[\"Home\",\"About\",\"Services\",\"Contact\",\"FAQ\"]")
+  activeThemeZipPath String?
+  status          SiteStatus @default(IDLE)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
