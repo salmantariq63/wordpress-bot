@@ -10,7 +10,12 @@ import {
   Wifi,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PipelineLogEntry } from "@/lib/pipeline-types";
+import {
+  parsePipelineSsePayload,
+  TerminalLogger,
+  type LogMessage,
+  type TerminalPipelineStatus,
+} from "@/components/TerminalLogger";
 import {
   DEFAULT_PAGES,
   SINGLE_CONFIG_ID,
@@ -171,8 +176,10 @@ export function SettingsDashboard() {
     type: "success" | "error" | "info";
     message: string;
   } | null>(null);
-  const [pipelineRunning, setPipelineRunning] = useState(false);
-  const [pipelineLogs, setPipelineLogs] = useState<PipelineLogEntry[]>([]);
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
+  const [logs, setLogs] = useState<LogMessage[]>([]);
+  const [pipelineStatus, setPipelineStatus] =
+    useState<TerminalPipelineStatus>("IDLE");
 
   const patch = useCallback((partial: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -320,13 +327,20 @@ export function SettingsDashboard() {
     }
   };
 
+  const appendLog = useCallback((entry: LogMessage) => {
+    setLogs((prev) => [...prev, entry]);
+  }, []);
+
   const launchAutomation = async () => {
-    setPipelineRunning(true);
-    setPipelineLogs([]);
+    setIsPipelineRunning(true);
+    setPipelineStatus("RUNNING");
+    setLogs([]);
     setBanner({
       type: "info",
       message: "Automation pipeline started. Streaming logs below…",
     });
+
+    let failed = false;
 
     try {
       const saveRes = await fetch("/api/config", {
@@ -336,10 +350,15 @@ export function SettingsDashboard() {
       });
       if (!saveRes.ok) {
         const saveData = await saveRes.json();
-        setBanner({
-          type: "error",
-          message: saveData.error ?? "Save configuration before launching.",
+        const message = saveData.error ?? "Save configuration before launching.";
+        setPipelineStatus("FAILED");
+        appendLog({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          message,
         });
+        setBanner({ type: "error", message });
+        failed = true;
         return;
       }
 
@@ -350,13 +369,22 @@ export function SettingsDashboard() {
       });
 
       if (!res.ok || !res.body) {
-        setBanner({ type: "error", message: "Pipeline request failed." });
+        const message = "Pipeline request failed.";
+        setPipelineStatus("FAILED");
+        appendLog({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          message,
+        });
+        setBanner({ type: "error", message });
+        failed = true;
         return;
       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let completed = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -372,35 +400,61 @@ export function SettingsDashboard() {
           const payload = line.slice(5).trim();
           if (!payload) continue;
 
-          try {
-            const event = JSON.parse(payload) as
-              | PipelineLogEntry
-              | { type: "done" }
-              | { type: "error"; message: string };
+          const parsed = parsePipelineSsePayload(payload);
+          if (!parsed) continue;
 
-            if ("type" in event && event.type === "done") {
-              setBanner({
-                type: "success",
-                message: "Phase 1–3 automation completed successfully.",
-              });
-              continue;
-            }
-            if ("type" in event && event.type === "error") {
-              setBanner({ type: "error", message: event.message });
-              continue;
-            }
-            if ("message" in event) {
-              setPipelineLogs((prev) => [...prev, event]);
-            }
-          } catch {
-            /* ignore malformed chunks */
+          if (parsed.kind === "log") {
+            setLogs((prev) => [...prev, parsed.entry]);
+            continue;
+          }
+
+          if (parsed.kind === "done") {
+            completed = true;
+            setPipelineStatus("COMPLETED");
+            appendLog({
+              timestamp: new Date().toISOString(),
+              level: "info",
+              phase: "complete",
+              message: "Pipeline finished — status COMPLETED.",
+            });
+            setBanner({
+              type: "success",
+              message: "Phase 1–3 automation completed successfully.",
+            });
+            continue;
+          }
+
+          if (parsed.kind === "error") {
+            failed = true;
+            setPipelineStatus("FAILED");
+            appendLog({
+              timestamp: new Date().toISOString(),
+              level: "error",
+              message: parsed.message,
+            });
+            setBanner({ type: "error", message: parsed.message });
           }
         }
       }
+
+      if (!completed && !failed) {
+        setPipelineStatus("FAILED");
+        appendLog({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          message: "Pipeline stream ended unexpectedly.",
+        });
+      }
     } catch {
+      setPipelineStatus("FAILED");
+      appendLog({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        message: "Pipeline stream disconnected.",
+      });
       setBanner({ type: "error", message: "Pipeline stream disconnected." });
     } finally {
-      setPipelineRunning(false);
+      setIsPipelineRunning(false);
     }
   };
 
@@ -747,36 +801,17 @@ export function SettingsDashboard() {
         )}
       </div>
 
-      {pipelineLogs.length > 0 || pipelineRunning ? (
-        <section className="mt-8 rounded-2xl border border-border bg-slate-950 p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-100">Pipeline log</h2>
-            {pipelineRunning ? (
-              <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Running…
-              </span>
-            ) : null}
-          </div>
-          <ul className="max-h-64 space-y-1 overflow-y-auto font-mono text-xs">
-            {pipelineLogs.map((entry, index) => (
-              <li
-                key={`${entry.timestamp}-${index}`}
-                className={
-                  entry.level === "error"
-                    ? "text-red-400"
-                    : entry.level === "warn"
-                      ? "text-amber-300"
-                      : "text-slate-300"
-                }
-              >
-                [{entry.phase ?? "pipeline"}] {entry.message}
-                {entry.pageTitle ? ` (${entry.pageTitle})` : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <TerminalLogger
+        className="mt-8"
+        logs={logs}
+        status={isPipelineRunning ? "RUNNING" : pipelineStatus}
+        onClear={() => {
+          setLogs([]);
+          if (!isPipelineRunning) {
+            setPipelineStatus("IDLE");
+          }
+        }}
+      />
 
       <footer className="mt-8 flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted">
@@ -801,7 +836,7 @@ export function SettingsDashboard() {
           <button
             type="button"
             onClick={launchAutomation}
-            disabled={!connectionsVerified || pipelineRunning}
+            disabled={!connectionsVerified || isPipelineRunning}
             title={
               connectionsVerified
                 ? undefined
@@ -809,7 +844,7 @@ export function SettingsDashboard() {
             }
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pipelineRunning ? (
+            {isPipelineRunning ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Rocket className="h-4 w-4" />
