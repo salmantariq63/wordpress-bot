@@ -1,5 +1,6 @@
 import { loadSiteConfig } from "@/lib/config-loader";
 import { createGrokClient, GROK_MODEL } from "@/lib/grok-client";
+import { createGrokChatCompletion } from "@/lib/grok-request";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { Phase2Result } from "@/lib/pipeline-types";
@@ -60,24 +61,31 @@ export async function executePhase2(
     pageId,
   });
 
-  const completion = await client.chat.completions.create({
-    model: GROK_MODEL,
-    temperature: 0.7,
-    messages: [
-      { role: "system", content: buildSystemPrompt() },
-      {
-        role: "user",
-        content: buildUserPrompt(pageTitle, {
-          businessName: config.businessName,
-          niche: config.niche,
-          targetAudience: config.targetAudience,
-          toneOfVoice: config.toneOfVoice,
-          coreServices: config.coreServicesList,
-          targetKeywords: config.targetKeywordsList,
-        }),
-      },
-    ],
-  });
+  const completion = await createGrokChatCompletion(
+    client,
+    {
+      model: GROK_MODEL,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: buildSystemPrompt() },
+        {
+          role: "user",
+          content: buildUserPrompt(pageTitle, {
+            businessName: config.businessName,
+            niche: config.niche,
+            targetAudience: config.targetAudience,
+            toneOfVoice: config.toneOfVoice,
+            coreServices: config.coreServicesList,
+            targetKeywords: config.targetKeywordsList,
+          }),
+        },
+      ],
+    },
+    {
+      label: `Phase 2 content for "${pageTitle}"`,
+      onLog,
+    }
+  );
 
   const raw = completion.choices[0]?.message?.content?.trim();
   if (!raw) {

@@ -1,5 +1,6 @@
 import { loadSiteConfig } from "@/lib/config-loader";
 import { createGrokClient, extractJsonObject, GROK_MODEL } from "@/lib/grok-client";
+import { createGrokChatCompletion } from "@/lib/grok-request";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { SeoValidationPayload } from "@/lib/pipeline-types";
@@ -22,7 +23,15 @@ Rules:
 - seo_title max 60 characters.
 - meta_description max 160 characters.
 - Ensure exactly one H1 and logical H2/H3 hierarchy in corrected_html when validation_passed is false.
-- No markdown, no prose outside JSON.`;
+- No markdown, no prose outside JSON.
+- Keep corrected_html concise: only fix heading hierarchy/H1 issues; do not rewrite the entire page or add new sections.`;
+}
+
+const MAX_SEO_HTML_CHARS = 14_000;
+
+function htmlForSeoAudit(rawHtml: string): string {
+  if (rawHtml.length <= MAX_SEO_HTML_CHARS) return rawHtml;
+  return `${rawHtml.slice(0, MAX_SEO_HTML_CHARS)}\n<!-- HTML truncated for SEO audit -->`;
 }
 
 function buildSeoUserPrompt(
@@ -33,8 +42,8 @@ function buildSeoUserPrompt(
   return `Page title: ${pageTitle}
 Target keywords: ${keywords.join(", ") || "general industry terms"}
 
-HTML to audit:
-${rawHtml}`;
+HTML to audit (may be truncated):
+${htmlForSeoAudit(rawHtml)}`;
 }
 
 function parseSeoPayload(text: string): SeoValidationPayload {
@@ -76,22 +85,29 @@ export async function executePhase3(
     pageId,
   });
 
-  const completion = await client.chat.completions.create({
-    model: GROK_MODEL,
-    temperature: 0.2,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: buildSeoSystemPrompt() },
-      {
-        role: "user",
-        content: buildSeoUserPrompt(
-          pageTitle,
-          rawHtml,
-          config.targetKeywordsList
-        ),
-      },
-    ],
-  });
+  const completion = await createGrokChatCompletion(
+    client,
+    {
+      model: GROK_MODEL,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: buildSeoSystemPrompt() },
+        {
+          role: "user",
+          content: buildSeoUserPrompt(
+            pageTitle,
+            rawHtml,
+            config.targetKeywordsList
+          ),
+        },
+      ],
+    },
+    {
+      label: `Phase 3 SEO for "${pageTitle}"`,
+      onLog,
+    }
+  );
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
@@ -99,9 +115,14 @@ export async function executePhase3(
   }
 
   const seo = parseSeoPayload(content);
-  const finalHtml = seo.validation_passed ? rawHtml : seo.corrected_html;
+  const finalHtml =
+    seo.validation_passed || !seo.corrected_html.trim()
+      ? rawHtml
+      : seo.corrected_html.length > rawHtml.length * 1.5
+        ? rawHtml
+        : seo.corrected_html;
 
-  if (!seo.validation_passed) {
+  if (!seo.validation_passed && finalHtml !== rawHtml) {
     log.warn(
       `SEO validation flagged issues on "${pageTitle}"; applying corrected HTML.`,
       { phase: "phase3", pageTitle, pageId }
@@ -113,6 +134,11 @@ export async function executePhase3(
         method: "POST",
         body: JSON.stringify({ content: finalHtml }),
       }
+    );
+  } else if (!seo.validation_passed) {
+    log.warn(
+      `SEO validation flagged issues on "${pageTitle}"; publishing with generated HTML and metadata only.`,
+      { phase: "phase3", pageTitle, pageId }
     );
   }
 

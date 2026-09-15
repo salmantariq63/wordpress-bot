@@ -427,10 +427,19 @@ export function SettingsDashboard() {
           if (parsed.kind === "error") {
             failed = true;
             setPipelineStatus("FAILED");
-            appendLog({
-              timestamp: new Date().toISOString(),
-              level: "error",
-              message: parsed.message,
+            setLogs((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.level === "error" && last.message === parsed.message) {
+                return prev;
+              }
+              return [
+                ...prev,
+                {
+                  timestamp: new Date().toISOString(),
+                  level: "error",
+                  message: parsed.message,
+                },
+              ];
             });
             setBanner({ type: "error", message: parsed.message });
           }

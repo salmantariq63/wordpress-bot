@@ -9,9 +9,13 @@ export function createGrokClient(config: LoadedSiteConfig): OpenAI {
     throw new Error("xAI API key is missing from site configuration.");
   }
 
+  const timeoutMs = Number(process.env.XAI_TIMEOUT_MS) || 900_000;
+
   return new OpenAI({
     apiKey: config.xaiApiKey,
     baseURL: "https://api.x.ai/v1",
+    timeout: timeoutMs,
+    maxRetries: 0,
   });
 }
 

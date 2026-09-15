@@ -9,7 +9,7 @@ import { SINGLE_CONFIG_ID } from "@/lib/site-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 900;
 
 function sseEncode(entry: PipelineLogEntry | { type: "done" } | { type: "error"; message: string }) {
   return `data: ${JSON.stringify(entry)}\n\n`;
@@ -41,6 +41,14 @@ export async function POST(request: NextRequest) {
         push(entry);
       };
 
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          clearInterval(heartbeat);
+        }
+      }, 15_000);
+
       (async () => {
         try {
           await loadSiteConfig(configId);
@@ -61,6 +69,8 @@ export async function POST(request: NextRequest) {
           }
 
           for (const page of pages) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
             await updateSiteStatus(configId, "POPULATING");
             push({
               timestamp: new Date().toISOString(),
@@ -113,13 +123,9 @@ export async function POST(request: NextRequest) {
           } catch {
             /* ignore secondary failure */
           }
-          push({
-            timestamp: new Date().toISOString(),
-            level: "error",
-            message,
-          });
           push({ type: "error", message });
         } finally {
+          clearInterval(heartbeat);
           controller.close();
         }
       })();
