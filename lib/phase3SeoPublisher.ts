@@ -3,7 +3,12 @@ import { createGrokClient, extractJsonObject, GROK_MODEL } from "@/lib/grok-clie
 import { createGrokChatCompletion } from "@/lib/grok-request";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
-import type { SeoValidationPayload } from "@/lib/pipeline-types";
+import type { ScaffoledPage, SeoValidationPayload } from "@/lib/pipeline-types";
+import {
+  assignWordPressReadingSettings,
+  isHomePage,
+  publishSlugForPage,
+} from "@/lib/wordpress-page-roles";
 import { wpRequest, type WpPage } from "@/lib/wordpress-client";
 
 function buildSeoSystemPrompt(): string {
@@ -73,7 +78,8 @@ export async function executePhase3(
   pageId: number,
   pageTitle: string,
   rawHtml: string,
-  onLog?: LogSink
+  onLog?: LogSink,
+  pageMeta?: Pick<ScaffoledPage, "slug">
 ): Promise<SeoValidationPayload> {
   const log = createPipelineLogger(onLog ?? (() => undefined));
   const config = await loadSiteConfig(configId);
@@ -144,10 +150,12 @@ export async function executePhase3(
 
   const seoTitle = truncateMeta(seo.seo_title, 60);
   const metaDescription = truncateMeta(seo.meta_description, 160);
+  const existingSlug = pageMeta?.slug ?? "";
+  const slug = publishSlugForPage(pageTitle, existingSlug, seo.slug);
 
   const publishBody: Record<string, unknown> = {
     status: "publish",
-    slug: seo.slug || undefined,
+    slug,
     title: seoTitle,
     excerpt: metaDescription,
     content: finalHtml,
@@ -186,7 +194,7 @@ export async function executePhase3(
         method: "POST",
         body: JSON.stringify({
           status: "publish",
-          slug: seo.slug || undefined,
+          slug,
           title: seoTitle,
           excerpt: metaDescription,
           content: finalHtml,
@@ -209,6 +217,14 @@ export async function executePhase3(
     `SEO summary — H1: ${seo.h1_count}, hierarchy: ${seo.heading_hierarchy_valid}, keywords: ${seo.keyword_density_passed}`,
     { phase: "phase3", pageTitle, pageId }
   );
+
+  if (isHomePage(pageTitle, slug ?? existingSlug)) {
+    await assignWordPressReadingSettings(
+      config,
+      [{ id: pageId, title: pageTitle, slug: slug ?? existingSlug, status: "publish" }],
+      onLog
+    );
+  }
 
   return seo;
 }

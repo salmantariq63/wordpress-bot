@@ -4,11 +4,18 @@ import { createGrokChatCompletion } from "@/lib/grok-request";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { Phase2Result } from "@/lib/pipeline-types";
+import { isHomePage } from "@/lib/wordpress-page-roles";
 import { wpRequest, type WpPage } from "@/lib/wordpress-client";
 
 function buildSystemPrompt(): string {
   return `You are an expert conversion copywriter and front-end HTML author for WordPress sites.
 Return ONLY valid HTML fragment content (no markdown fences, no explanations).
+
+CRITICAL — WordPress theme context:
+- The active WordPress theme already renders the site header, primary navigation, and footer.
+- Output ONLY the main page body that belongs in the editor content area (between header and footer).
+- Do NOT include <header>, <footer>, <nav>, site-wide menus, logo bars, copyright bars, or duplicate CTAs that belong in the theme chrome.
+
 Use semantic, theme-agnostic markup: <section>, <div>, <h1>-<h3>, <p>, <ul>, <a>, <button>.
 Apply modern inline utility-style CSS on containers and CTAs (spacing, max-width, flex/grid, readable typography).
 Do NOT include WordPress block editor comments, Gutenberg blocks, Elementor/Divi shortcodes, or page-builder tags.
@@ -35,8 +42,40 @@ Tone of voice: ${brief.toneOfVoice}
 Core services: ${brief.coreServices.join(", ") || "N/A"}
 Target keywords (use naturally): ${brief.targetKeywords.join(", ") || "N/A"}
 
-Structure the page with hero, value proposition, services/benefits, social proof or trust section, and a strong CTA footer.
+Structure the page with hero, value proposition, services/benefits, social proof or trust section, and a strong closing CTA section (not a site footer).
 Make copy specific to the niche and audience.`;
+}
+
+function buildHomePageAddon(brief: {
+  businessName: string;
+  coreServices: string[];
+}): string {
+  return `
+
+This is the SITE HOME / FRONT PAGE (main landing page visitors see first).
+Requirements:
+- Produce a FULL landing page body with at least 6 distinct <section> blocks (hero, value prop, services overview, benefits, trust/proof, FAQ or process, final CTA).
+- Minimum ~800 words of visible copy across sections (not counting HTML tags).
+- Highlight ${brief.businessName} and primary services: ${brief.coreServices.join(", ") || "core offerings"}.
+- Do NOT output only a slim hero plus header/footer-like chrome — the theme supplies navigation and footer.`;
+}
+
+function buildUserPromptForPage(
+  pageTitle: string,
+  brief: {
+    businessName: string;
+    niche: string;
+    targetAudience: string;
+    toneOfVoice: string;
+    coreServices: string[];
+    targetKeywords: string[];
+  }
+): string {
+  const base = buildUserPrompt(pageTitle, brief);
+  if (isHomePage(pageTitle)) {
+    return base + buildHomePageAddon(brief);
+  }
+  return base;
 }
 
 function stripCodeFences(html: string): string {
@@ -70,7 +109,7 @@ export async function executePhase2(
         { role: "system", content: buildSystemPrompt() },
         {
           role: "user",
-          content: buildUserPrompt(pageTitle, {
+          content: buildUserPromptForPage(pageTitle, {
             businessName: config.businessName,
             niche: config.niche,
             targetAudience: config.targetAudience,
@@ -93,6 +132,13 @@ export async function executePhase2(
   }
 
   const html = stripCodeFences(raw);
+
+  if (isHomePage(pageTitle) && html.length < 2500) {
+    log.warn(
+      `Home page HTML looks short (${html.length} chars); saving anyway — re-run Phase 2 if the front page looks empty.`,
+      { phase: "phase2", pageTitle, pageId }
+    );
+  }
 
   await wpRequest<WpPage>(
     config,

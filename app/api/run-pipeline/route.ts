@@ -103,7 +103,8 @@ export async function POST(request: NextRequest) {
               page.id,
               page.title,
               phase2.html,
-              onLog
+              onLog,
+              { slug: page.slug }
             );
           }
 

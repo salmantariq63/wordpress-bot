@@ -2,6 +2,7 @@ import { loadSiteConfig } from "@/lib/config-loader";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { ScaffoledPage } from "@/lib/pipeline-types";
+import { assignWordPressReadingSettings } from "@/lib/wordpress-page-roles";
 import { titleToSlug, wpRequest, type WpPage } from "@/lib/wordpress-client";
 
 function pageTitleFromConfig(title: string): string {
@@ -89,6 +90,8 @@ export async function executePhase1(
       pageId: created.id,
     });
   }
+
+  await assignWordPressReadingSettings(config, results, onLog);
 
   log.info(`Phase 1 complete: ${results.length} page(s) ready.`, { phase: "phase1" });
   return results;
