@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 import type { LoadedSiteConfig } from "@/lib/config-loader";
 
-export const GROK_MODEL = "grok-2";
+/** Default chat model for content + SEO. Override with XAI_MODEL in .env */
+export const GROK_MODEL = process.env.XAI_MODEL?.trim() || "grok-4.6";
 
 export function createGrokClient(config: LoadedSiteConfig): OpenAI {
   if (!config.xaiApiKey.trim()) {

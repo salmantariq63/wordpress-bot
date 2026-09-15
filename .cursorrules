@@ -12,6 +12,6 @@ Build a self-hosted Node.js / Next.js web application that takes a client's Word
 ## Stack & Conventions
 - Framework: Next.js (App Router), TypeScript, Tailwind CSS, Lucide Icons.
 - Storage/State: Prisma with SQLite (for local credential and job state persistence).
-- AI Client: Official OpenAI SDK pointed to xAI Base URL (`https://api.x.ai/v1`) using `grok-2` model.
+- AI Client: Official OpenAI SDK pointed to xAI Base URL (`https://api.x.ai/v1`) using `grok-4.6` (override via `XAI_MODEL`).
 - WordPress Protocol: Standard WP REST API (`/wp-json/wp/v2/`) using Application Passwords, combined with Node `ssh2`/`sftp` for zip theme deployments.
 - Styling Strategy: Responsive, modern theme-agnostic semantic HTML (no block-editor comments or proprietary page-builder tags).

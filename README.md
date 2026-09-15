@@ -6,7 +6,7 @@ Local setup dashboard for configuring xAI, WordPress REST credentials, SFTP host
 
 - Next.js (App Router), TypeScript, Tailwind CSS, Lucide Icons
 - Prisma + SQLite
-- OpenAI SDK → xAI (`https://api.x.ai/v1`)
+- OpenAI SDK → xAI (`https://api.x.ai/v1`, default model `grok-4.6`)
 
 ## Getting started
 
