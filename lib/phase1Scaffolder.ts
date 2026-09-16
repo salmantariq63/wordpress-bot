@@ -3,6 +3,12 @@ import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { ScaffoledPage } from "@/lib/pipeline-types";
 import { assignWordPressReadingSettings } from "@/lib/wordpress-page-roles";
+import {
+  fetchAllWpPages,
+  findExistingScaffoldPage,
+  getWpPageTitle,
+  pageMatchesScaffoldTarget,
+} from "@/lib/wordpress-page-lookup";
 import { titleToSlug, wpRequest, type WpPage } from "@/lib/wordpress-client";
 
 function pageTitleFromConfig(title: string): string {
@@ -33,32 +39,33 @@ export async function executePhase1(
   }
 
   log.info("Fetching existing WordPress pages…", { phase: "phase1" });
-  const existing = await wpRequest<WpPage[]>(
-    config,
-    "/wp-json/wp/v2/pages?per_page=100&status=draft,publish,pending,private&context=edit"
-  );
-
-  const existingBySlug = new Map<string, WpPage>();
-  for (const page of existing) {
-    existingBySlug.set(page.slug.toLowerCase(), page);
-  }
+  const existing = await fetchAllWpPages(config);
 
   const results: ScaffoledPage[] = [];
 
   for (const pageTitle of config.pagesToBuildList) {
     const title = pageTitleFromConfig(pageTitle);
     const slug = titleToSlug(title) || "page";
-    const found = existingBySlug.get(slug);
+    const found = findExistingScaffoldPage(existing, title);
 
     if (found) {
-      log.info(`Page "${title}" already exists (id ${found.id}).`, {
-        phase: "phase1",
-        pageTitle: title,
-        pageId: found.id,
-      });
+      const duplicates = existing.filter(
+        (p) => p.id !== found.id && pageMatchesScaffoldTarget(p, title)
+      );
+      if (duplicates.length > 0) {
+        log.warn(
+          `Page "${title}" has ${duplicates.length + 1} WordPress match(es); reusing id ${found.id} (also: ${duplicates.map((p) => p.id).join(", ")}). Delete extras in WP admin if needed.`,
+          { phase: "phase1", pageTitle: title, pageId: found.id }
+        );
+      } else {
+        log.info(
+          `Page "${title}" already exists (id ${found.id}, slug "${found.slug}"). Skipping create; Phase 2 will update content.`,
+          { phase: "phase1", pageTitle: title, pageId: found.id }
+        );
+      }
       results.push({
         id: found.id,
-        title,
+        title: getWpPageTitle(found) || title,
         slug: found.slug,
         status: found.status,
       });
