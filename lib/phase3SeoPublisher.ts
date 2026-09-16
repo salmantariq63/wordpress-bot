@@ -81,7 +81,7 @@ export async function executePhase3(
   pageTitle: string,
   rawHtml: string,
   onLog?: LogSink,
-  pageMeta?: Pick<ScaffoledPage, "slug">
+  pageMeta?: Pick<ScaffoledPage, "slug" | "scaffoldTitle">
 ): Promise<SeoValidationPayload> {
   const log = createPipelineLogger(onLog ?? (() => undefined));
   const config = await loadSiteConfig(configId);
@@ -144,8 +144,9 @@ export async function executePhase3(
 
   const seoTitle = truncateMeta(seo.seo_title, 60);
   const metaDescription = truncateMeta(seo.meta_description, 160);
+  const scaffoldTitle = pageMeta?.scaffoldTitle?.trim() || pageTitle;
   const existingSlug = pageMeta?.slug ?? "";
-  const slug = publishSlugForPage(pageTitle, existingSlug, seo.slug);
+  const slug = publishSlugForPage(scaffoldTitle, existingSlug, seo.slug);
 
   const publishBody: Record<string, unknown> = {
     status: "publish",
@@ -210,10 +211,18 @@ export async function executePhase3(
     { phase: "phase3", pageTitle, pageId }
   );
 
-  if (isHomePage(pageTitle, slug ?? existingSlug)) {
+  if (isHomePage(scaffoldTitle, slug ?? existingSlug)) {
     await assignWordPressReadingSettings(
       config,
-      [{ id: pageId, title: pageTitle, slug: slug ?? existingSlug, status: "publish" }],
+      [
+        {
+          id: pageId,
+          title: scaffoldTitle,
+          scaffoldTitle,
+          slug: slug ?? existingSlug,
+          status: "publish",
+        },
+      ],
       onLog
     );
   }

@@ -2,12 +2,17 @@ import { loadSiteConfig } from "@/lib/config-loader";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { ScaffoledPage } from "@/lib/pipeline-types";
+import {
+  parseScaffoldPageMap,
+  saveScaffoldPageMap,
+  scaffoldMapKey,
+} from "@/lib/scaffold-page-map";
 import { assignWordPressReadingSettings } from "@/lib/wordpress-page-roles";
 import {
   fetchAllWpPages,
-  findExistingScaffoldPage,
-  getWpPageTitle,
+  fetchWordPressReadingPageIds,
   pageMatchesScaffoldTarget,
+  resolveScaffoldPage,
 } from "@/lib/wordpress-page-lookup";
 import { titleToSlug, wpRequest, type WpPage } from "@/lib/wordpress-client";
 
@@ -21,6 +26,7 @@ export async function executePhase1(
 ): Promise<ScaffoledPage[]> {
   const log = createPipelineLogger(onLog ?? (() => undefined));
   const config = await loadSiteConfig(configId);
+  const storedMap = parseScaffoldPageMap(config.scaffoldPageIds);
 
   log.info("Phase 1: configuring WordPress site settings…", { phase: "phase1" });
 
@@ -40,13 +46,21 @@ export async function executePhase1(
 
   log.info("Fetching existing WordPress pages…", { phase: "phase1" });
   const existing = await fetchAllWpPages(config);
+  const reading = await fetchWordPressReadingPageIds(config);
 
   const results: ScaffoledPage[] = [];
+  const updatedMap = { ...storedMap };
 
   for (const pageTitle of config.pagesToBuildList) {
     const title = pageTitleFromConfig(pageTitle);
+    const mapKey = scaffoldMapKey(title);
     const slug = titleToSlug(title) || "page";
-    const found = findExistingScaffoldPage(existing, title);
+    const found = resolveScaffoldPage({
+      configTitle: title,
+      pages: existing,
+      storedPageId: storedMap[mapKey],
+      reading,
+    });
 
     if (found) {
       const duplicates = existing.filter(
@@ -63,9 +77,11 @@ export async function executePhase1(
           { phase: "phase1", pageTitle: title, pageId: found.id }
         );
       }
+      updatedMap[mapKey] = found.id;
       results.push({
         id: found.id,
-        title: getWpPageTitle(found) || title,
+        title,
+        scaffoldTitle: title,
         slug: found.slug,
         status: found.status,
       });
@@ -84,9 +100,11 @@ export async function executePhase1(
       }),
     });
 
+    updatedMap[mapKey] = created.id;
     results.push({
       id: created.id,
       title,
+      scaffoldTitle: title,
       slug: created.slug,
       status: created.status,
     });
@@ -98,6 +116,7 @@ export async function executePhase1(
     });
   }
 
+  await saveScaffoldPageMap(configId, updatedMap);
   await assignWordPressReadingSettings(config, results, onLog);
 
   log.info(`Phase 1 complete: ${results.length} page(s) ready.`, { phase: "phase1" });

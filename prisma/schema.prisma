@@ -33,6 +33,7 @@ model SiteConfig {
   coreServices    Json
   targetKeywords  Json
   pagesToBuild    Json       @default("[\"Home\",\"About\",\"Services\",\"Contact\",\"FAQ\"]")
+  scaffoldPageIds Json?
   activeThemeZipPath String?
   status          SiteStatus @default(IDLE)
   createdAt       DateTime   @default(now())

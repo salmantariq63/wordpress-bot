@@ -23,7 +23,9 @@ export type PipelineStatus = {
 
 export type ScaffoledPage = {
   id: number;
+  /** Stable label from pagesToBuild (e.g. "About"), not the SEO title in WordPress. */
   title: string;
+  scaffoldTitle: string;
   slug: string;
   status: string;
 };

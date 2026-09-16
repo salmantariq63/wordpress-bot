@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
             const phase2 = await executePhase2(
               configId,
               page.id,
-              page.title,
+              page.scaffoldTitle,
               onLog
             );
 
@@ -101,10 +101,10 @@ export async function POST(request: NextRequest) {
             await executePhase3(
               configId,
               page.id,
-              page.title,
+              page.scaffoldTitle,
               phase2.html,
               onLog,
-              { slug: page.slug }
+              { slug: page.slug, scaffoldTitle: page.scaffoldTitle }
             );
           }
 

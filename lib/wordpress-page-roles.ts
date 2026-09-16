@@ -2,7 +2,7 @@ import type { LoadedSiteConfig } from "@/lib/config-loader";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { ScaffoledPage } from "@/lib/pipeline-types";
-import { wpRequest } from "@/lib/wordpress-client";
+import { titleToSlug, wpRequest } from "@/lib/wordpress-client";
 
 export function isHomePage(title: string, slug?: string): boolean {
   const t = title.trim().toLowerCase();
@@ -17,17 +17,21 @@ export function isBlogPage(title: string, slug?: string): boolean {
 }
 
 export function publishSlugForPage(
-  pageTitle: string,
+  scaffoldTitle: string,
   existingSlug: string,
   seoSlug: string
 ): string | undefined {
-  if (isHomePage(pageTitle, existingSlug)) {
+  const canonical = titleToSlug(scaffoldTitle) || "";
+  if (isHomePage(scaffoldTitle, existingSlug)) {
     return existingSlug.toLowerCase() === "home" ? existingSlug : "home";
   }
-  if (isBlogPage(pageTitle, existingSlug)) {
+  if (isBlogPage(scaffoldTitle, existingSlug)) {
     return existingSlug.toLowerCase() === "blog" ? existingSlug : "blog";
   }
-  return seoSlug.trim() || undefined;
+  if (existingSlug.trim()) {
+    return existingSlug.trim();
+  }
+  return canonical || seoSlug.trim() || undefined;
 }
 
 export async function assignWordPressReadingSettings(
@@ -36,7 +40,9 @@ export async function assignWordPressReadingSettings(
   onLog?: LogSink
 ): Promise<void> {
   const log = createPipelineLogger(onLog ?? (() => undefined));
-  const home = pages.find((p) => isHomePage(p.title, p.slug));
+  const home = pages.find((p) =>
+    isHomePage(p.scaffoldTitle ?? p.title, p.slug)
+  );
   if (!home) {
     log.warn(
       'No "Home" page in pagesToBuild; skipping static front page assignment.',
@@ -45,7 +51,9 @@ export async function assignWordPressReadingSettings(
     return;
   }
 
-  const blog = pages.find((p) => isBlogPage(p.title, p.slug));
+  const blog = pages.find((p) =>
+    isBlogPage(p.scaffoldTitle ?? p.title, p.slug)
+  );
   const payload: Record<string, string | number> = {
     show_on_front: "page",
     page_on_front: home.id,
