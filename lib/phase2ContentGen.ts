@@ -4,8 +4,9 @@ import { createGrokChatCompletion } from "@/lib/grok-request";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { Phase2Result } from "@/lib/pipeline-types";
+import { countChromeIssues, normalizePageHtml } from "@/lib/page-content-html";
 import { isHomePage } from "@/lib/wordpress-page-roles";
-import { wpRequest, type WpPage } from "@/lib/wordpress-client";
+import { replaceWordPressPageContent } from "@/lib/wordpress-page-content";
 
 function buildSystemPrompt(): string {
   return `You are an expert conversion copywriter and front-end HTML author for WordPress sites.
@@ -15,6 +16,8 @@ CRITICAL — WordPress theme context:
 - The active WordPress theme already renders the site header, primary navigation, and footer.
 - Output ONLY the main page body that belongs in the editor content area (between header and footer).
 - Do NOT include <header>, <footer>, <nav>, site-wide menus, logo bars, copyright bars, or duplicate CTAs that belong in the theme chrome.
+- On automation re-runs, output a COMPLETE replacement for the page body — never append menus, logos, or duplicate hero bars.
+- Use <section> for heroes and content blocks — never wrap the page in <header> or <footer>.
 
 Use semantic, theme-agnostic markup: <section>, <div>, <h1>-<h3>, <p>, <ul>, <a>, <button>.
 Apply modern inline utility-style CSS on containers and CTAs (spacing, max-width, flex/grid, readable typography).
@@ -131,7 +134,14 @@ export async function executePhase2(
     throw new Error(`Grok returned empty HTML for page "${pageTitle}".`);
   }
 
-  const html = stripCodeFences(raw);
+  let html = normalizePageHtml(stripCodeFences(raw));
+  const chromeCount = countChromeIssues(stripCodeFences(raw));
+  if (chromeCount > 0) {
+    log.warn(
+      `Removed or converted ${chromeCount} header/footer/nav element(s) from generated HTML.`,
+      { phase: "phase2", pageTitle, pageId }
+    );
+  }
 
   if (isHomePage(pageTitle) && html.length < 2500) {
     log.warn(
@@ -140,14 +150,7 @@ export async function executePhase2(
     );
   }
 
-  await wpRequest<WpPage>(
-    config,
-    `/wp-json/wp/v2/pages/${pageId}?context=edit`,
-    {
-      method: "POST",
-      body: JSON.stringify({ content: html }),
-    }
-  );
+  html = await replaceWordPressPageContent(config, pageId, html);
 
   log.info(`Phase 2: content saved to WordPress page ${pageId}.`, {
     phase: "phase2",

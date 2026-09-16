@@ -9,6 +9,8 @@ import {
   isHomePage,
   publishSlugForPage,
 } from "@/lib/wordpress-page-roles";
+import { normalizePageHtml } from "@/lib/page-content-html";
+import { replaceWordPressPageContent } from "@/lib/wordpress-page-content";
 import { wpRequest, type WpPage } from "@/lib/wordpress-client";
 
 function buildSeoSystemPrompt(): string {
@@ -121,32 +123,24 @@ export async function executePhase3(
   }
 
   const seo = parseSeoPayload(content);
-  const finalHtml =
+  const pickedHtml =
     seo.validation_passed || !seo.corrected_html.trim()
       ? rawHtml
       : seo.corrected_html.length > rawHtml.length * 1.5
         ? rawHtml
         : seo.corrected_html;
+  const finalHtml = normalizePageHtml(pickedHtml);
 
-  if (!seo.validation_passed && finalHtml !== rawHtml) {
+  if (!seo.validation_passed) {
     log.warn(
-      `SEO validation flagged issues on "${pageTitle}"; applying corrected HTML.`,
-      { phase: "phase3", pageTitle, pageId }
-    );
-    await wpRequest<WpPage>(
-      config,
-      `/wp-json/wp/v2/pages/${pageId}?context=edit`,
-      {
-        method: "POST",
-        body: JSON.stringify({ content: finalHtml }),
-      }
-    );
-  } else if (!seo.validation_passed) {
-    log.warn(
-      `SEO validation flagged issues on "${pageTitle}"; publishing with generated HTML and metadata only.`,
+      finalHtml !== normalizePageHtml(rawHtml)
+        ? `SEO validation flagged issues on "${pageTitle}"; applying corrected HTML.`
+        : `SEO validation flagged issues on "${pageTitle}"; publishing with metadata and sanitized HTML.`,
       { phase: "phase3", pageTitle, pageId }
     );
   }
+
+  await replaceWordPressPageContent(config, pageId, finalHtml);
 
   const seoTitle = truncateMeta(seo.seo_title, 60);
   const metaDescription = truncateMeta(seo.meta_description, 160);
@@ -158,7 +152,6 @@ export async function executePhase3(
     slug,
     title: seoTitle,
     excerpt: metaDescription,
-    content: finalHtml,
     meta: {
       _yoast_wpseo_title: seoTitle,
       _yoast_wpseo_metadesc: metaDescription,
@@ -197,7 +190,6 @@ export async function executePhase3(
           slug,
           title: seoTitle,
           excerpt: metaDescription,
-          content: finalHtml,
         }),
       }
     );
