@@ -7,7 +7,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci
+# postinstall runs prisma generate — schema is not copied yet, so skip scripts here.
+RUN npm ci --ignore-scripts
 
 COPY . .
 
