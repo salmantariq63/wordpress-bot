@@ -6,11 +6,14 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json .npmrc ./
+COPY package.json package-lock.json ./
 # postinstall runs prisma generate — schema is not copied yet, so skip scripts here.
 RUN npm ci --ignore-scripts
 
 COPY . .
+
+# Ensure Tailwind/lightningcss native binary for Linux glibc (Debian/Railway).
+RUN npm install --no-save lightningcss-linux-x64-gnu@1.32.0
 
 RUN npx prisma generate && npm run build
 
