@@ -53,8 +53,7 @@ export async function publishToSocialPlatform(
     case "instagram":
       return publishToInstagram(
         config.socialFacebookPageToken,
-        config.socialInstagramAccountId,
-        text
+        config.socialInstagramAccountId
       );
     default:
       return { ok: false, error: `Unsupported platform: ${platform}` };
@@ -204,8 +203,7 @@ async function publishToFacebook(
  */
 async function publishToInstagram(
   pageToken: string | null | undefined,
-  igAccountId: string | null | undefined,
-  _text: string
+  igAccountId: string | null | undefined
 ): Promise<SocialPublishResult> {
   if (!pageToken?.trim() || !igAccountId?.trim()) {
     return {

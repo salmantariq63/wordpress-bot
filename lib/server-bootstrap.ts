@@ -2,7 +2,6 @@ import { execSync } from "child_process";
 import { ensureServerStorageSync } from "@/lib/database-url";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __wpBotBootstrapped: boolean | undefined;
 }
 

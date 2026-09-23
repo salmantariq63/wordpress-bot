@@ -120,7 +120,7 @@ export function prepareContentFromGrok(
     };
   }
 
-  let html = normalizePageHtml(cleaned);
+  const html = normalizePageHtml(cleaned);
   const chromeCount = countChromeIssues(cleaned);
   if (chromeCount > 0) {
     log.warn(

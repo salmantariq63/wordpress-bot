@@ -12,8 +12,6 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "50mb",
     },
   },
-  // instrumentation.ts runs bootstrap before traffic (Railway SQLite on /data volume).
-  instrumentationHook: true,
 };
 
 export default nextConfig;
