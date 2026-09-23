@@ -19,8 +19,10 @@ ENV HOSTNAME=0.0.0.0
 ENV DATABASE_URL="file:/data/prisma/prod.db"
 ENV UPLOAD_THEMES_DIR="/data/uploads/themes"
 
-RUN mkdir -p /data/prisma /data/uploads/themes
+RUN sed -i 's/\r$//' /app/scripts/docker-entrypoint.sh \
+  && mkdir -p /data/prisma /data/uploads/themes \
+  && chmod +x /app/scripts/docker-entrypoint.sh
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma db push && npm start"]
+CMD ["/app/scripts/docker-entrypoint.sh"]

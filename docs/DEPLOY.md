@@ -30,6 +30,8 @@ This app is **not a good fit for Vercel serverless** as-is (SQLite file, theme u
    | `XAI_MODEL` | `grok-4.6` (optional) |
    | `XAI_TIMEOUT_MS` | `900000` (optional) |
 
+   **Important:** Do **not** set `DATABASE_URL=file:./dev.db` on Railway — that causes `Prisma error code 14: Unable to open the database file`. Delete that variable to use the entrypoint default on your volume, or set `file:/data/prisma/prod.db` explicitly.
+
 6. **Settings** → generate a **public domain** (HTTPS).
 7. Deploy. First boot runs `prisma db push` then `npm start`.
 
