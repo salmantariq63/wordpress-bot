@@ -7,8 +7,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
+# Use npm install (not ci): lockfile from npm 11 locally must resolve on Railway's npm 10.
 # postinstall runs prisma generate — schema is not copied yet, so skip scripts here.
-RUN npm ci --ignore-scripts
+RUN corepack enable && npm install --ignore-scripts --no-audit --no-fund
 
 COPY . .
 
