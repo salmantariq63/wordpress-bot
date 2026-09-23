@@ -1,6 +1,6 @@
 # Grok-Powered WordPress Automation Engine
 
-Local setup dashboard for configuring xAI, WordPress REST credentials, SFTP hosting, business brief, and theme uploads before running Phases 1–3 automation.
+Local setup dashboard for configuring xAI, WordPress REST credentials, SFTP hosting, business brief, and theme uploads — then running Phases 1–8 automation (site build, blogs, content maintenance, social, E2E orchestration, and approvals).
 
 ## Stack
 
@@ -18,22 +18,46 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) for the settings dashboard.
 
+## Phases
+
+| Phase | What it does |
+|-------|----------------|
+| 1–3 | Theme deploy, page scaffold, builder-aware content (Gutenberg / Elementor / Divi / HTML), SEO publish |
+| 4 | Blog topics → Grok posts → SEO → auto-fix → publish or draft |
+| 5 | Find stale pages/posts → refresh with Grok → SEO → publish or draft |
+| 6 | Social captions/hashtags/snippets → draft, schedule, or publish (X / LinkedIn / Facebook / Instagram) |
+| 7 | End-to-end orchestrator chaining Phases 1–6 |
+| 8 | Management: approvals, schedules, failed tasks, auto vs manual |
+
+**Non-breaking:** Phase 6 social is **disabled by default**. Existing Phase 1–5 buttons and routes behave as before until you enable Social.
+
 ## API routes
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET/POST | `/api/config` | Load or save `SiteConfig` |
 | POST | `/api/test-connection` | Verify Grok + WordPress REST |
-| POST | `/api/upload-theme` | Upload theme `.zip` to `public/uploads/themes` |
-| POST | `/api/run-pipeline` | SSE stream — Phases 1–3 automation |
+| POST | `/api/upload-theme` | Upload theme `.zip` |
+| POST | `/api/run-pipeline` | SSE — Phases 1–3 |
+| POST | `/api/run-blog` | SSE — Phase 4 |
+| POST | `/api/run-content-update` | SSE — Phase 5 |
+| POST | `/api/run-social` | SSE — Phase 6 (`mode: generate \| flush`) |
+| POST | `/api/run-e2e` | SSE — Phase 7 full chain |
+| GET | `/api/jobs` | Recent job history |
+| GET | `/api/manage` | Phase 8 management overview |
+| POST | `/api/manage/approve` | Approve/reject blog, updates, social |
 
-## Remote theme paths (optional)
+## Scheduling
 
-Set when SFTP paths differ from defaults:
-
-- `WP_REMOTE_ROOT` — WordPress install root (default `/var/www/html`)
-- `WP_REMOTE_THEMES_PATH` — themes directory (default `{WP_REMOTE_ROOT}/wp-content/themes`)
+- Content updates: cron `POST /api/run-content-update`
+- Due social posts: cron `POST /api/run-social` with `{ "mode": "flush" }`
 
 ## Environment
 
 Copy `.env.example` to `.env` and set `DATABASE_URL` (default SQLite file: `prisma/dev.db`).
+
+## Deploy (production)
+
+**Recommended:** [Railway](https://railway.com) — GitHub connect + **volume on `/data`** (same “push to deploy” feel as Vercel, but with persistent SQLite and theme uploads). See **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
+Vercel is not recommended until the app uses Postgres + blob storage + background jobs for long pipelines.

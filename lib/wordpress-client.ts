@@ -81,4 +81,66 @@ export type WpPage = {
   slug: string;
   status: string;
   content?: { raw?: string; rendered?: string };
+  excerpt?: { raw?: string; rendered?: string };
+  date?: string;
+  modified?: string;
+  link?: string;
 };
+
+export type WpPost = {
+  id: number;
+  title: { rendered?: string; raw?: string };
+  slug: string;
+  status: string;
+  content?: { raw?: string; rendered?: string };
+  excerpt?: { raw?: string; rendered?: string };
+  date?: string;
+  modified?: string;
+  link?: string;
+};
+
+export function wpRenderedTitle(
+  item: Pick<WpPage, "title"> | Pick<WpPost, "title">
+): string {
+  return (item.title.raw || item.title.rendered || "").trim();
+}
+
+/** List WordPress posts (paginated). */
+export async function listWordPressPosts(
+  config: LoadedSiteConfig,
+  options?: {
+    status?: string;
+    perPage?: number;
+    page?: number;
+    orderby?: string;
+  }
+): Promise<WpPost[]> {
+  const status = options?.status ?? "publish,draft,pending,private";
+  const perPage = options?.perPage ?? 50;
+  const page = options?.page ?? 1;
+  const orderby = options?.orderby ?? "modified";
+  const path =
+    `/wp-json/wp/v2/posts?context=edit&status=${encodeURIComponent(status)}` +
+    `&per_page=${perPage}&page=${page}&orderby=${orderby}&order=asc`;
+  return wpRequest<WpPost[]>(config, path);
+}
+
+/** List WordPress pages (paginated). */
+export async function listWordPressPages(
+  config: LoadedSiteConfig,
+  options?: {
+    status?: string;
+    perPage?: number;
+    page?: number;
+    orderby?: string;
+  }
+): Promise<WpPage[]> {
+  const status = options?.status ?? "publish,draft,pending,private";
+  const perPage = options?.perPage ?? 50;
+  const page = options?.page ?? 1;
+  const orderby = options?.orderby ?? "modified";
+  const path =
+    `/wp-json/wp/v2/pages?context=edit&status=${encodeURIComponent(status)}` +
+    `&per_page=${perPage}&page=${page}&orderby=${orderby}&order=asc`;
+  return wpRequest<WpPage[]>(config, path);
+}

@@ -1,29 +1,20 @@
 import { loadSiteConfig } from "@/lib/config-loader";
+import {
+  loadGenerationContext,
+  buildPageSystemPrompt,
+  grokUsesJsonObject,
+} from "@/lib/content-generation-context";
+import {
+  prepareContentFromGrok,
+  savePreparedPageContent,
+} from "@/lib/content-pipeline";
+import { formatLabel } from "@/lib/content-format";
 import { createGrokClient, GROK_MODEL } from "@/lib/grok-client";
 import { createGrokChatCompletion } from "@/lib/grok-request";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
 import type { Phase2Result } from "@/lib/pipeline-types";
-import { countChromeIssues, normalizePageHtml } from "@/lib/page-content-html";
 import { isHomePage } from "@/lib/wordpress-page-roles";
-import { replaceWordPressPageContent } from "@/lib/wordpress-page-content";
-
-function buildSystemPrompt(): string {
-  return `You are an expert conversion copywriter and front-end HTML author for WordPress sites.
-Return ONLY valid HTML fragment content (no markdown fences, no explanations).
-
-CRITICAL — WordPress theme context:
-- The active WordPress theme already renders the site header, primary navigation, and footer.
-- Output ONLY the main page body that belongs in the editor content area (between header and footer).
-- Do NOT include <header>, <footer>, <nav>, site-wide menus, logo bars, copyright bars, or duplicate CTAs that belong in the theme chrome.
-- On automation re-runs, output a COMPLETE replacement for the page body — never append menus, logos, or duplicate hero bars.
-- Use <section> for heroes and content blocks — never wrap the page in <header> or <footer>.
-
-Use semantic, theme-agnostic markup: <section>, <div>, <h1>-<h3>, <p>, <ul>, <a>, <button>.
-Apply modern inline utility-style CSS on containers and CTAs (spacing, max-width, flex/grid, readable typography).
-Do NOT include WordPress block editor comments, Gutenberg blocks, Elementor/Divi shortcodes, or page-builder tags.
-Include exactly one <h1> per page. Write high-converting copy aligned to the business brief.`;
-}
 
 function buildUserPrompt(
   pageTitle: string,
@@ -57,7 +48,7 @@ function buildHomePageAddon(brief: {
 
 This is the SITE HOME / FRONT PAGE (main landing page visitors see first).
 Requirements:
-- Produce a FULL landing page body with at least 6 distinct <section> blocks (hero, value prop, services overview, benefits, trust/proof, FAQ or process, final CTA).
+- Produce a FULL landing page body with at least 6 distinct sections (hero, value prop, services overview, benefits, trust/proof, FAQ or process, final CTA).
 - Minimum ~800 words of visible copy across sections (not counting HTML tags).
 - Highlight ${brief.businessName} and primary services: ${brief.coreServices.join(", ") || "core offerings"}.
 - Do NOT output only a slim hero plus header/footer-like chrome — the theme supplies navigation and footer.`;
@@ -81,12 +72,6 @@ function buildUserPromptForPage(
   return base;
 }
 
-function stripCodeFences(html: string): string {
-  const trimmed = html.trim();
-  const fenced = trimmed.match(/^```(?:html)?\s*([\s\S]*?)```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-}
-
 export async function executePhase2(
   configId: string,
   pageId: number,
@@ -96,20 +81,30 @@ export async function executePhase2(
   const log = createPipelineLogger(onLog ?? (() => undefined));
   const config = await loadSiteConfig(configId);
   const client = createGrokClient(config);
+  const genCtx = await loadGenerationContext(config, onLog);
 
-  log.info(`Phase 2: generating content for "${pageTitle}"…`, {
-    phase: "phase2",
-    pageTitle,
-    pageId,
-  });
+  log.info(
+    `Phase 2: generating ${formatLabel(genCtx.format)} content for "${pageTitle}"…`,
+    {
+      phase: "phase2",
+      pageTitle,
+      pageId,
+    }
+  );
 
   const completion = await createGrokChatCompletion(
     client,
     {
       model: GROK_MODEL,
       temperature: 0.7,
+      ...(grokUsesJsonObject(genCtx.format)
+        ? { response_format: { type: "json_object" as const } }
+        : {}),
       messages: [
-        { role: "system", content: buildSystemPrompt() },
+        {
+          role: "system",
+          content: buildPageSystemPrompt(genCtx.format, genCtx.themeGuide),
+        },
         {
           role: "user",
           content: buildUserPromptForPage(pageTitle, {
@@ -131,26 +126,26 @@ export async function executePhase2(
 
   const raw = completion.choices[0]?.message?.content?.trim();
   if (!raw) {
-    throw new Error(`Grok returned empty HTML for page "${pageTitle}".`);
+    throw new Error(`Grok returned empty content for page "${pageTitle}".`);
   }
 
-  let html = normalizePageHtml(stripCodeFences(raw));
-  const chromeCount = countChromeIssues(stripCodeFences(raw));
-  if (chromeCount > 0) {
+  const prepared = prepareContentFromGrok(raw, genCtx.format, onLog, {
+    pageTitle,
+    phase: "phase2",
+  });
+
+  if (
+    isHomePage(pageTitle) &&
+    genCtx.format === "html" &&
+    prepared.auditHtml.length < 2500
+  ) {
     log.warn(
-      `Removed or converted ${chromeCount} header/footer/nav element(s) from generated HTML.`,
+      `Home page HTML looks short (${prepared.auditHtml.length} chars); saving anyway — re-run Phase 2 if the front page looks empty.`,
       { phase: "phase2", pageTitle, pageId }
     );
   }
 
-  if (isHomePage(pageTitle) && html.length < 2500) {
-    log.warn(
-      `Home page HTML looks short (${html.length} chars); saving anyway — re-run Phase 2 if the front page looks empty.`,
-      { phase: "phase2", pageTitle, pageId }
-    );
-  }
-
-  html = await replaceWordPressPageContent(config, pageId, html);
+  const html = await savePreparedPageContent(config, pageId, prepared);
 
   log.info(`Phase 2: content saved to WordPress page ${pageId}.`, {
     phase: "phase2",
@@ -158,5 +153,11 @@ export async function executePhase2(
     pageId,
   });
 
-  return { pageId, pageTitle, html };
+  return {
+    pageId,
+    pageTitle,
+    html,
+    contentFormat: prepared.format,
+    auditHtml: prepared.auditHtml,
+  };
 }

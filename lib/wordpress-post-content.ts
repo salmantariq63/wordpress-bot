@@ -1,23 +1,19 @@
 import type { LoadedSiteConfig } from "@/lib/config-loader";
-import type { ContentFormat } from "@/lib/content-format";
 import {
   hasGutenbergBlocks,
   normalizeGutenbergContent,
 } from "@/lib/gutenberg-content";
 import { normalizePageHtml } from "@/lib/page-content-html";
-import { wpRequest, type WpPage } from "@/lib/wordpress-client";
+import type { WordPressContentWrite } from "@/lib/wordpress-page-content";
+import { wpRequest, type WpPost } from "@/lib/wordpress-client";
 
 type ContentPayload = {
   content: string | { raw: string };
 };
 
-export type WordPressContentWrite = {
-  format: ContentFormat;
-  html: string;
-  meta?: Record<string, string>;
-};
+export type WordPressPostWrite = WordPressContentWrite;
 
-function normalizeForWrite(write: WordPressContentWrite): string {
+function normalizeForWrite(write: WordPressPostWrite): string {
   if (write.format === "gutenberg") {
     return normalizeGutenbergContent(write.html);
   }
@@ -28,14 +24,14 @@ function normalizeForWrite(write: WordPressContentWrite): string {
 }
 
 /**
- * Fully replaces page body content (avoids Gutenberg appending another HTML block on re-runs).
+ * Fully replaces blog post body content (avoids Gutenberg stacking on re-runs).
  */
-export async function replaceWordPressPageContent(
+export async function replaceWordPressPostContent(
   config: LoadedSiteConfig,
-  pageId: number,
-  content: string | WordPressContentWrite
+  postId: number,
+  content: string | WordPressPostWrite
 ): Promise<string> {
-  const write: WordPressContentWrite =
+  const write: WordPressPostWrite =
     typeof content === "string"
       ? {
           format: hasGutenbergBlocks(content) ? "gutenberg" : "html",
@@ -44,9 +40,9 @@ export async function replaceWordPressPageContent(
       : content;
 
   const normalized = normalizeForWrite(write);
-  const endpoint = `/wp-json/wp/v2/pages/${pageId}?context=edit`;
+  const endpoint = `/wp-json/wp/v2/posts/${postId}?context=edit`;
 
-  await wpRequest<WpPage>(config, endpoint, {
+  await wpRequest<WpPost>(config, endpoint, {
     method: "POST",
     body: JSON.stringify({ content: "" } satisfies ContentPayload),
   });
@@ -69,7 +65,7 @@ export async function replaceWordPressPageContent(
 
   for (const payload of payloads) {
     try {
-      await wpRequest<WpPage>(config, endpoint, {
+      await wpRequest<WpPost>(config, endpoint, {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -79,19 +75,27 @@ export async function replaceWordPressPageContent(
     }
   }
 
-  if (write.meta) {
-    try {
-      await wpRequest<WpPage>(config, endpoint, {
-        method: "POST",
-        body: JSON.stringify({ content: { raw: normalized } }),
-      });
-      return normalized;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
   throw lastError instanceof Error
     ? lastError
-    : new Error("Failed to replace WordPress page content.");
+    : new Error("Failed to replace WordPress post content.");
+}
+
+export async function createWordPressPost(
+  config: LoadedSiteConfig,
+  data: {
+    title: string;
+    slug?: string;
+    status?: "draft" | "publish";
+    content?: string;
+  }
+): Promise<WpPost> {
+  return wpRequest<WpPost>(config, "/wp-json/wp/v2/posts?context=edit", {
+    method: "POST",
+    body: JSON.stringify({
+      title: data.title,
+      slug: data.slug,
+      status: data.status ?? "draft",
+      content: data.content ?? "",
+    }),
+  });
 }

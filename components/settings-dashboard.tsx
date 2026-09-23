@@ -3,13 +3,19 @@
 import {
   AlertCircle,
   CheckCircle2,
+  FilePenLine,
+  GitBranch,
   Loader2,
+  Newspaper,
+  RefreshCw,
   Rocket,
   Save,
+  Share2,
   Upload,
   Wifi,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ManagementPanel } from "@/components/management-panel";
 import {
   parsePipelineSsePayload,
   TerminalLogger,
@@ -22,7 +28,16 @@ import {
   STANDARD_PAGE_OPTIONS,
 } from "@/lib/site-config";
 
-type TabId = "credentials" | "hosting" | "business" | "pages";
+type TabId =
+  | "credentials"
+  | "hosting"
+  | "business"
+  | "pages"
+  | "blog"
+  | "maintenance"
+  | "social"
+  | "e2e"
+  | "manage";
 
 type ConnectionStatus = {
   grok: { ok: boolean; error: string | null };
@@ -47,6 +62,55 @@ type FormState = {
   targetKeywords: string[];
   pagesToBuild: string[];
   activeThemeZipPath: string;
+  blogPostsPerRun: number;
+  blogRequireApproval: boolean;
+  blogIncludeExternalLinks: boolean;
+  updateMaxAgeDays: number;
+  updateRequireApproval: boolean;
+  updateRefreshPages: boolean;
+  updateRefreshPosts: boolean;
+  updateMaxItemsPerRun: number;
+  socialEnabled: boolean;
+  socialAutoGenerateOnBlog: boolean;
+  socialAutoGenerateOnUpdate: boolean;
+  socialRequireApproval: boolean;
+  socialPlatforms: string[];
+  socialScheduleDelayHours: number;
+  socialXAccessToken: string;
+  socialLinkedInAccessToken: string;
+  socialLinkedInAuthorUrn: string;
+  socialFacebookPageToken: string;
+  socialFacebookPageId: string;
+  socialInstagramAccountId: string;
+  e2eIncludeBlog: boolean;
+  e2eIncludeContentUpdate: boolean;
+  e2eIncludeSocial: boolean;
+};
+
+type JobHistory = {
+  blogPosts: Array<{
+    id: string;
+    topic: string;
+    title: string | null;
+    status: string;
+    wpPostId: number | null;
+    createdAt: string;
+  }>;
+  contentUpdates: Array<{
+    id: string;
+    contentType: string;
+    title: string;
+    status: string;
+    reason: string;
+    createdAt: string;
+  }>;
+  socialPosts?: Array<{
+    id: string;
+    platform: string;
+    status: string;
+    sourceTitle: string | null;
+    createdAt: string;
+  }>;
 };
 
 const initialForm: FormState = {
@@ -66,6 +130,29 @@ const initialForm: FormState = {
   targetKeywords: [],
   pagesToBuild: [...DEFAULT_PAGES],
   activeThemeZipPath: "",
+  blogPostsPerRun: 3,
+  blogRequireApproval: true,
+  blogIncludeExternalLinks: true,
+  updateMaxAgeDays: 90,
+  updateRequireApproval: true,
+  updateRefreshPages: true,
+  updateRefreshPosts: true,
+  updateMaxItemsPerRun: 5,
+  socialEnabled: false,
+  socialAutoGenerateOnBlog: true,
+  socialAutoGenerateOnUpdate: false,
+  socialRequireApproval: true,
+  socialPlatforms: ["x", "linkedin", "facebook", "instagram"],
+  socialScheduleDelayHours: 1,
+  socialXAccessToken: "",
+  socialLinkedInAccessToken: "",
+  socialLinkedInAuthorUrn: "",
+  socialFacebookPageToken: "",
+  socialFacebookPageId: "",
+  socialInstagramAccountId: "",
+  e2eIncludeBlog: true,
+  e2eIncludeContentUpdate: false,
+  e2eIncludeSocial: true,
 };
 
 const tabs: { id: TabId; label: string }[] = [
@@ -73,7 +160,14 @@ const tabs: { id: TabId; label: string }[] = [
   { id: "hosting", label: "Hosting & Theme" },
   { id: "business", label: "Business Brief" },
   { id: "pages", label: "Page Structure" },
+  { id: "blog", label: "Blog (Phase 4)" },
+  { id: "maintenance", label: "Updates (Phase 5)" },
+  { id: "social", label: "Social (Phase 6)" },
+  { id: "e2e", label: "E2E (Phase 7)" },
+  { id: "manage", label: "Manage (Phase 8)" },
 ];
+
+const SOCIAL_PLATFORM_OPTIONS = ["x", "linkedin", "facebook", "instagram"] as const;
 
 function parseCommaInput(value: string): string[] {
   return value
@@ -180,11 +274,23 @@ export function SettingsDashboard() {
   const [logs, setLogs] = useState<LogMessage[]>([]);
   const [pipelineStatus, setPipelineStatus] =
     useState<TerminalPipelineStatus>("IDLE");
+  const [jobHistory, setJobHistory] = useState<JobHistory | null>(null);
 
   const patch = useCallback((partial: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...partial }));
     setConnectionsVerified(false);
     setConnectionStatus(null);
+  }, []);
+
+  const loadJobHistory = useCallback(async () => {
+    try {
+      const res = await fetch("/api/jobs");
+      if (!res.ok) return;
+      const data = (await res.json()) as JobHistory;
+      setJobHistory(data);
+    } catch {
+      /* optional history */
+    }
   }, []);
 
   useEffect(() => {
@@ -212,15 +318,48 @@ export function SettingsDashboard() {
               ? data.config.pagesToBuild
               : [...DEFAULT_PAGES],
             activeThemeZipPath: data.config.activeThemeZipPath ?? "",
+            blogPostsPerRun: data.config.blogPostsPerRun ?? 3,
+            blogRequireApproval: data.config.blogRequireApproval !== false,
+            blogIncludeExternalLinks:
+              data.config.blogIncludeExternalLinks !== false,
+            updateMaxAgeDays: data.config.updateMaxAgeDays ?? 90,
+            updateRequireApproval: data.config.updateRequireApproval !== false,
+            updateRefreshPages: data.config.updateRefreshPages !== false,
+            updateRefreshPosts: data.config.updateRefreshPosts !== false,
+            updateMaxItemsPerRun: data.config.updateMaxItemsPerRun ?? 5,
+            socialEnabled: data.config.socialEnabled === true,
+            socialAutoGenerateOnBlog:
+              data.config.socialAutoGenerateOnBlog !== false,
+            socialAutoGenerateOnUpdate:
+              data.config.socialAutoGenerateOnUpdate === true,
+            socialRequireApproval: data.config.socialRequireApproval !== false,
+            socialPlatforms: data.config.socialPlatforms?.length
+              ? data.config.socialPlatforms
+              : ["x", "linkedin", "facebook", "instagram"],
+            socialScheduleDelayHours:
+              data.config.socialScheduleDelayHours ?? 1,
+            socialXAccessToken: data.config.socialXAccessToken ?? "",
+            socialLinkedInAccessToken:
+              data.config.socialLinkedInAccessToken ?? "",
+            socialLinkedInAuthorUrn: data.config.socialLinkedInAuthorUrn ?? "",
+            socialFacebookPageToken: data.config.socialFacebookPageToken ?? "",
+            socialFacebookPageId: data.config.socialFacebookPageId ?? "",
+            socialInstagramAccountId:
+              data.config.socialInstagramAccountId ?? "",
+            e2eIncludeBlog: data.config.e2eIncludeBlog !== false,
+            e2eIncludeContentUpdate:
+              data.config.e2eIncludeContentUpdate === true,
+            e2eIncludeSocial: data.config.e2eIncludeSocial !== false,
           });
         }
+        await loadJobHistory();
       } catch {
         setBanner({ type: "error", message: "Could not load saved configuration." });
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadJobHistory]);
 
   const togglePage = (page: string) => {
     patch({
@@ -331,13 +470,17 @@ export function SettingsDashboard() {
     setLogs((prev) => [...prev, entry]);
   }, []);
 
-  const launchAutomation = async () => {
+  const streamPipeline = async (
+    endpoint: string,
+    body: Record<string, unknown>,
+    successMessage: string
+  ) => {
     setIsPipelineRunning(true);
     setPipelineStatus("RUNNING");
     setLogs([]);
     setBanner({
       type: "info",
-      message: "Automation pipeline started. Streaming logs below…",
+      message: "Pipeline started. Streaming logs below…",
     });
 
     let failed = false;
@@ -362,10 +505,10 @@ export function SettingsDashboard() {
         return;
       }
 
-      const res = await fetch("/api/run-pipeline", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ configId: SINGLE_CONFIG_ID }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok || !res.body) {
@@ -419,7 +562,7 @@ export function SettingsDashboard() {
             });
             setBanner({
               type: "success",
-              message: "Phase 1–3 automation completed successfully.",
+              message: successMessage,
             });
             continue;
           }
@@ -464,7 +607,68 @@ export function SettingsDashboard() {
       setBanner({ type: "error", message: "Pipeline stream disconnected." });
     } finally {
       setIsPipelineRunning(false);
+      await loadJobHistory();
     }
+  };
+
+  const launchAutomation = async () => {
+    await streamPipeline(
+      "/api/run-pipeline",
+      { configId: SINGLE_CONFIG_ID },
+      "Phase 1–3 automation completed successfully."
+    );
+  };
+
+  const launchBlogPipeline = async () => {
+    await streamPipeline(
+      "/api/run-blog",
+      {
+        configId: SINGLE_CONFIG_ID,
+        topicCount: form.blogPostsPerRun,
+      },
+      "Phase 4 blog generation completed."
+    );
+  };
+
+  const launchContentUpdate = async () => {
+    await streamPipeline(
+      "/api/run-content-update",
+      { configId: SINGLE_CONFIG_ID },
+      "Phase 5 content update completed."
+    );
+  };
+
+  const launchSocial = async (mode: "generate" | "flush" = "generate") => {
+    await streamPipeline(
+      "/api/run-social",
+      { configId: SINGLE_CONFIG_ID, mode },
+      mode === "flush"
+        ? "Scheduled social posts flushed."
+        : "Phase 6 social generation completed."
+    );
+  };
+
+  const launchE2E = async () => {
+    await streamPipeline(
+      "/api/run-e2e",
+      {
+        configId: SINGLE_CONFIG_ID,
+        includeSiteSetup: true,
+        includeBlog: form.e2eIncludeBlog,
+        includeContentUpdate: form.e2eIncludeContentUpdate,
+        includeSocial: form.e2eIncludeSocial && form.socialEnabled,
+        topicCount: form.blogPostsPerRun,
+      },
+      "Phase 7 end-to-end workflow completed."
+    );
+  };
+
+  const toggleSocialPlatform = (platform: string) => {
+    patch({
+      socialPlatforms: form.socialPlatforms.includes(platform)
+        ? form.socialPlatforms.filter((p) => p !== platform)
+        : [...form.socialPlatforms, platform],
+    });
   };
 
   if (loading) {
@@ -485,8 +689,8 @@ export function SettingsDashboard() {
           Setup Dashboard
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Configure API credentials, hosting, business brief, and page structure before
-          launching automated theme deployment and content generation.
+          Configure credentials and business brief, then run Phases 1–5 alone, or
+          enable social + E2E for the full connected pipeline with approvals.
         </p>
       </header>
 
@@ -808,6 +1012,515 @@ export function SettingsDashboard() {
             </div>
           </section>
         )}
+
+        {activeTab === "blog" && (
+          <section className="space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Blog Generation (Phase 4)
+              </h2>
+              <p className="text-sm text-muted">
+                Topic → Grok → structured blog HTML → SEO check → auto-fix →
+                publish or draft.
+              </p>
+            </div>
+            <Field label="Posts per run">
+              <input
+                type="number"
+                min={1}
+                max={10}
+                className={inputClass}
+                value={form.blogPostsPerRun}
+                onChange={(e) =>
+                  patch({ blogPostsPerRun: Number(e.target.value) || 1 })
+                }
+              />
+            </Field>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.blogRequireApproval}
+                onChange={(e) =>
+                  patch({ blogRequireApproval: e.target.checked })
+                }
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">
+                  Require human approval
+                </span>
+                <span className="text-xs text-muted">
+                  When enabled, posts are saved as WordPress drafts instead of
+                  publishing immediately.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.blogIncludeExternalLinks}
+                onChange={(e) =>
+                  patch({ blogIncludeExternalLinks: e.target.checked })
+                }
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">
+                  Include external reference links
+                </span>
+                <span className="text-xs text-muted">
+                  Adds 1–2 reputable outbound links alongside internal page links.
+                </span>
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={launchBlogPipeline}
+              disabled={!connectionsVerified || isPipelineRunning}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPipelineRunning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Newspaper className="h-4 w-4" />
+              )}
+              Run Phase 4 Blog Pipeline
+            </button>
+            {jobHistory?.blogPosts?.length ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700">
+                  Recent blog jobs
+                </p>
+                <ul className="divide-y divide-border rounded-lg border border-border bg-white text-sm">
+                  {jobHistory.blogPosts.slice(0, 8).map((job) => (
+                    <li
+                      key={job.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                    >
+                      <span className="text-slate-800">
+                        {job.title || job.topic}
+                      </span>
+                      <span className="text-xs uppercase tracking-wide text-muted">
+                        {job.status}
+                        {job.wpPostId ? ` · #${job.wpPostId}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {activeTab === "maintenance" && (
+          <section className="space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Content Updates (Phase 5)
+              </h2>
+              <p className="text-sm text-muted">
+                Identify stale pages/posts, regenerate with Grok, run SEO
+                validation, then publish or save as drafts.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Stale after (days)">
+                <input
+                  type="number"
+                  min={7}
+                  max={730}
+                  className={inputClass}
+                  value={form.updateMaxAgeDays}
+                  onChange={(e) =>
+                    patch({ updateMaxAgeDays: Number(e.target.value) || 90 })
+                  }
+                />
+              </Field>
+              <Field label="Max items per run">
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  className={inputClass}
+                  value={form.updateMaxItemsPerRun}
+                  onChange={(e) =>
+                    patch({
+                      updateMaxItemsPerRun: Number(e.target.value) || 5,
+                    })
+                  }
+                />
+              </Field>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.updateRequireApproval}
+                onChange={(e) =>
+                  patch({ updateRequireApproval: e.target.checked })
+                }
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">
+                  Require human approval
+                </span>
+                <span className="text-xs text-muted">
+                  Save refreshed content as drafts for review instead of live
+                  publish.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.updateRefreshPages}
+                onChange={(e) =>
+                  patch({ updateRefreshPages: e.target.checked })
+                }
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Refresh site pages
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.updateRefreshPosts}
+                onChange={(e) =>
+                  patch({ updateRefreshPosts: e.target.checked })
+                }
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Refresh blog posts
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={launchContentUpdate}
+              disabled={!connectionsVerified || isPipelineRunning}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPipelineRunning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Run Phase 5 Content Update
+            </button>
+            {jobHistory?.contentUpdates?.length ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700">
+                  Recent update jobs
+                </p>
+                <ul className="divide-y divide-border rounded-lg border border-border bg-white text-sm">
+                  {jobHistory.contentUpdates.slice(0, 8).map((job) => (
+                    <li key={job.id} className="space-y-0.5 px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-slate-800">{job.title}</span>
+                        <span className="text-xs uppercase tracking-wide text-muted">
+                          {job.contentType} · {job.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted">{job.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {activeTab === "social" && (
+          <section className="space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Social Media (Phase 6)
+              </h2>
+              <p className="text-sm text-muted">
+                Off by default so Phases 1–5 keep working unchanged. When enabled,
+                Grok creates platform captions, hashtags, and promo snippets after
+                blogs (and optionally updates).
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.socialEnabled}
+                onChange={(e) => patch({ socialEnabled: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">
+                  Enable social automation
+                </span>
+                <span className="text-xs text-muted">
+                  Required before Phase 6 generate / E2E social steps run.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.socialAutoGenerateOnBlog}
+                onChange={(e) =>
+                  patch({ socialAutoGenerateOnBlog: e.target.checked })
+                }
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Auto-generate after new blogs
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.socialAutoGenerateOnUpdate}
+                onChange={(e) =>
+                  patch({ socialAutoGenerateOnUpdate: e.target.checked })
+                }
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Auto-generate after content updates
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.socialRequireApproval}
+                onChange={(e) =>
+                  patch({ socialRequireApproval: e.target.checked })
+                }
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-800">
+                  Require approval before publishing
+                </span>
+                <span className="text-xs text-muted">
+                  Saves captions as drafts for Phase 8 review when enabled.
+                </span>
+              </span>
+            </label>
+            <Field label="Schedule delay (hours)">
+              <input
+                type="number"
+                min={0}
+                max={168}
+                className={inputClass}
+                value={form.socialScheduleDelayHours}
+                onChange={(e) =>
+                  patch({
+                    socialScheduleDelayHours: Number(e.target.value) || 0,
+                  })
+                }
+              />
+            </Field>
+            <div>
+              <p className="mb-2 text-sm font-medium text-slate-700">Platforms</p>
+              <ul className="flex flex-wrap gap-2">
+                {SOCIAL_PLATFORM_OPTIONS.map((platform) => (
+                  <li key={platform}>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-white px-3 py-1.5 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.socialPlatforms.includes(platform)}
+                        onChange={() => toggleSocialPlatform(platform)}
+                      />
+                      {platform}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="X (Twitter) access token">
+                <input
+                  type="password"
+                  className={inputClass}
+                  value={form.socialXAccessToken}
+                  onChange={(e) =>
+                    patch({ socialXAccessToken: e.target.value })
+                  }
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="LinkedIn access token">
+                <input
+                  type="password"
+                  className={inputClass}
+                  value={form.socialLinkedInAccessToken}
+                  onChange={(e) =>
+                    patch({ socialLinkedInAccessToken: e.target.value })
+                  }
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="LinkedIn author URN">
+                <input
+                  className={inputClass}
+                  value={form.socialLinkedInAuthorUrn}
+                  onChange={(e) =>
+                    patch({ socialLinkedInAuthorUrn: e.target.value })
+                  }
+                  placeholder="urn:li:person:..."
+                />
+              </Field>
+              <Field label="Facebook page token">
+                <input
+                  type="password"
+                  className={inputClass}
+                  value={form.socialFacebookPageToken}
+                  onChange={(e) =>
+                    patch({ socialFacebookPageToken: e.target.value })
+                  }
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="Facebook page ID">
+                <input
+                  className={inputClass}
+                  value={form.socialFacebookPageId}
+                  onChange={(e) =>
+                    patch({ socialFacebookPageId: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label="Instagram business account ID">
+                <input
+                  className={inputClass}
+                  value={form.socialInstagramAccountId}
+                  onChange={(e) =>
+                    patch({ socialInstagramAccountId: e.target.value })
+                  }
+                />
+              </Field>
+            </div>
+            <p className="text-xs text-muted">
+              Without API tokens, captions are still generated and stored for
+              scheduled/manual posting.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => launchSocial("generate")}
+                disabled={
+                  !connectionsVerified ||
+                  isPipelineRunning ||
+                  !form.socialEnabled
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Share2 className="h-4 w-4" />
+                Generate from latest blog
+              </button>
+              <button
+                type="button"
+                onClick={() => launchSocial("flush")}
+                disabled={!connectionsVerified || isPipelineRunning}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Flush scheduled posts
+              </button>
+            </div>
+            {jobHistory?.socialPosts?.length ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700">
+                  Recent social jobs
+                </p>
+                <ul className="divide-y divide-border rounded-lg border border-border bg-white text-sm">
+                  {jobHistory.socialPosts.slice(0, 8).map((job) => (
+                    <li
+                      key={job.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                    >
+                      <span className="text-slate-800">
+                        {job.platform}
+                        {job.sourceTitle ? ` · ${job.sourceTitle}` : ""}
+                      </span>
+                      <span className="text-xs uppercase text-muted">
+                        {job.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {activeTab === "e2e" && (
+          <section className="space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                End-to-End Workflow (Phase 7)
+              </h2>
+              <p className="text-sm text-muted">
+                Chains existing phases: setup → content → SEO → live → blogs →
+                social → optional ongoing updates. Standalone Phase 1–5 buttons
+                remain unchanged.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.e2eIncludeBlog}
+                onChange={(e) => patch({ e2eIncludeBlog: e.target.checked })}
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Include blog generation (Phase 4)
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.e2eIncludeContentUpdate}
+                onChange={(e) =>
+                  patch({ e2eIncludeContentUpdate: e.target.checked })
+                }
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Include content updates (Phase 5)
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-primary"
+                checked={form.e2eIncludeSocial}
+                onChange={(e) => patch({ e2eIncludeSocial: e.target.checked })}
+              />
+              <span className="text-sm font-medium text-slate-800">
+                Include social generation (Phase 6, requires Social enabled)
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={launchE2E}
+              disabled={!connectionsVerified || isPipelineRunning}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPipelineRunning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <GitBranch className="h-4 w-4" />
+              )}
+              Run full E2E pipeline
+            </button>
+          </section>
+        )}
+
+        {activeTab === "manage" && (
+          <ManagementPanel
+            onBanner={(b) => {
+              setBanner(b);
+            }}
+          />
+        )}
       </div>
 
       <TerminalLogger
@@ -822,10 +1535,10 @@ export function SettingsDashboard() {
         }}
       />
 
-      <footer className="mt-8 flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <footer className="mt-8 flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm">
         <p className="text-sm text-muted">
           {connectionsVerified
-            ? "Connections verified — you can launch when ready."
+            ? "Connections verified — launch site setup, blogs, or content updates when ready."
             : "Run connection tests on the Credentials tab before launching automation."}
         </p>
         <div className="flex flex-wrap gap-3">
@@ -858,7 +1571,45 @@ export function SettingsDashboard() {
             ) : (
               <Rocket className="h-4 w-4" />
             )}
-            Launch Phase 1–3 Automation
+            Launch Phase 1–3
+          </button>
+          <button
+            type="button"
+            onClick={launchBlogPipeline}
+            disabled={!connectionsVerified || isPipelineRunning}
+            className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-5 py-2.5 text-sm font-semibold text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Newspaper className="h-4 w-4" />
+            Phase 4 Blog
+          </button>
+          <button
+            type="button"
+            onClick={launchContentUpdate}
+            disabled={!connectionsVerified || isPipelineRunning}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FilePenLine className="h-4 w-4" />
+            Phase 5 Updates
+          </button>
+          <button
+            type="button"
+            onClick={() => launchSocial("generate")}
+            disabled={
+              !connectionsVerified || isPipelineRunning || !form.socialEnabled
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-pink-200 bg-pink-50 px-5 py-2.5 text-sm font-semibold text-pink-800 hover:bg-pink-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Share2 className="h-4 w-4" />
+            Phase 6 Social
+          </button>
+          <button
+            type="button"
+            onClick={launchE2E}
+            disabled={!connectionsVerified || isPipelineRunning}
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <GitBranch className="h-4 w-4" />
+            Phase 7 E2E
           </button>
         </div>
       </footer>

@@ -6,6 +6,7 @@ import { Client as SshClient } from "ssh2";
 import { loadSiteConfig } from "@/lib/config-loader";
 import type { LogSink } from "@/lib/pipeline-logger";
 import { createPipelineLogger } from "@/lib/pipeline-logger";
+import { resolveStoredThemePath } from "@/lib/theme-upload-storage";
 import { wpRequest } from "@/lib/wordpress-client";
 
 export type ThemeDeployResult = {
@@ -59,9 +60,8 @@ export function detectThemeSlugFromZip(localZipPath: string): string {
   return withoutTimestamp.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "uploaded-theme";
 }
 
-function resolveLocalThemePath(activeThemeZipPath: string): string {
-  const relative = activeThemeZipPath.replace(/^\/+/, "");
-  return path.join(process.cwd(), "public", relative);
+export function resolveLocalThemePath(activeThemeZipPath: string): string {
+  return resolveStoredThemePath(activeThemeZipPath);
 }
 
 async function execSshCommand(

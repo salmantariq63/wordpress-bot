@@ -104,7 +104,11 @@ export async function POST(request: NextRequest) {
               page.scaffoldTitle,
               phase2.html,
               onLog,
-              { slug: page.slug, scaffoldTitle: page.scaffoldTitle }
+              { slug: page.slug, scaffoldTitle: page.scaffoldTitle },
+              {
+                contentFormat: phase2.contentFormat,
+                auditHtml: phase2.auditHtml,
+              }
             );
           }
 

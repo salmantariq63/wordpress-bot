@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ensureSiteConfigJsonIntegrity } from "@/lib/repair-site-config";
 import {
   DEFAULT_PAGES,
   SINGLE_CONFIG_ID,
+  normalizeMaintenanceSettings,
   parseStringArray,
   siteConfigToClient,
   type SiteConfigInput,
@@ -10,6 +12,7 @@ import {
 
 function buildConfigData(body: SiteConfigInput) {
   const pagesToBuild = parseStringArray(body.pagesToBuild);
+  const maintenance = normalizeMaintenanceSettings(body);
   return {
     xaiApiKey: body.xaiApiKey.trim(),
     wpUrl: body.wpUrl.trim(),
@@ -27,12 +30,15 @@ function buildConfigData(body: SiteConfigInput) {
     targetKeywords: parseStringArray(body.targetKeywords),
     pagesToBuild: pagesToBuild.length > 0 ? pagesToBuild : [...DEFAULT_PAGES],
     activeThemeZipPath: body.activeThemeZipPath?.trim() || null,
+    ...maintenance,
     ...(body.status ? { status: body.status } : {}),
   };
 }
 
 export async function GET() {
   try {
+    await ensureSiteConfigJsonIntegrity(SINGLE_CONFIG_ID);
+
     const config = await prisma.siteConfig.findUnique({
       where: { id: SINGLE_CONFIG_ID },
     });

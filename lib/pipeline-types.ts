@@ -1,8 +1,14 @@
+import type { ContentFormat } from "@/lib/content-format";
+
 export type PipelinePhase =
   | "setup"
   | "phase1"
   | "phase2"
   | "phase3"
+  | "phase4"
+  | "phase5"
+  | "phase6"
+  | "phase7"
   | "complete";
 
 export type PipelineLogLevel = "info" | "warn" | "error";
@@ -34,6 +40,8 @@ export type Phase2Result = {
   pageId: number;
   pageTitle: string;
   html: string;
+  contentFormat?: ContentFormat;
+  auditHtml?: string;
 };
 
 export type SeoValidationPayload = {
@@ -45,4 +53,47 @@ export type SeoValidationPayload = {
   keyword_density_passed: boolean;
   validation_passed: boolean;
   corrected_html: string;
+  simple_fixes_applied?: string[];
+};
+
+export type BlogTopic = {
+  topic: string;
+  keyword: string;
+  angle: string;
+};
+
+export type Phase4PostResult = {
+  topic: string;
+  keyword: string;
+  wpPostId: number;
+  title: string;
+  slug: string;
+  status: "draft" | "publish";
+  seoPassed: boolean;
+  blogPostRecordId?: string;
+};
+
+export type ContentUpdateCandidate = {
+  contentType: "page" | "post";
+  wpId: number;
+  title: string;
+  slug: string;
+  modified: string;
+  reason: string;
+  html: string;
+};
+
+export type Phase5UpdateResult = {
+  contentType: "page" | "post";
+  wpId: number;
+  title: string;
+  status: "draft" | "publish" | "skipped" | "failed";
+  reason: string;
+};
+
+export type SocialPlatformVariant = {
+  platform: "x" | "linkedin" | "facebook" | "instagram";
+  caption: string;
+  hashtags: string[];
+  promotionalSnippet: string;
 };

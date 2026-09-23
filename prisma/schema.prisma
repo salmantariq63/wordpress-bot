@@ -12,30 +12,165 @@ enum SiteStatus {
   SETTING_UP
   POPULATING
   PUBLISHING
+  BLOGGING
+  UPDATING
+  SOCIAL
+  ORCHESTRATING
   COMPLETED
   FAILED
 }
 
 model SiteConfig {
-  id              String     @id @default(cuid())
-  xaiApiKey       String
-  wpUrl           String
-  wpUsername      String
-  wpAppPassword   String
-  sftpHost        String?
-  sftpPort        String?
-  sftpUsername    String?
-  sftpPassword    String?
-  businessName    String
-  niche           String
-  targetAudience  String
-  toneOfVoice     String
-  coreServices    Json
-  targetKeywords  Json
-  pagesToBuild    Json       @default("[\"Home\",\"About\",\"Services\",\"Contact\",\"FAQ\"]")
-  scaffoldPageIds Json?
+  id                 String     @id @default(cuid())
+  xaiApiKey          String
+  wpUrl              String
+  wpUsername         String
+  wpAppPassword      String
+  sftpHost           String?
+  sftpPort           String?
+  sftpUsername       String?
+  sftpPassword       String?
+  businessName       String
+  niche              String
+  targetAudience     String
+  toneOfVoice        String
+  coreServices       Json
+  targetKeywords     Json
+  pagesToBuild       Json       @default("[\"Home\",\"About\",\"Services\",\"Contact\",\"FAQ\"]")
+  scaffoldPageIds    Json?
   activeThemeZipPath String?
-  status          SiteStatus @default(IDLE)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  status             SiteStatus @default(IDLE)
+
+  /// Phase 4 — how many blog posts to generate per run
+  blogPostsPerRun          Int     @default(3)
+  /// When true, posts are saved as WordPress drafts for human approval
+  blogRequireApproval      Boolean @default(true)
+  /// Include curated external reference links in blog content
+  blogIncludeExternalLinks Boolean @default(true)
+
+  /// Phase 5 — content older than this many days is a refresh candidate
+  updateMaxAgeDays         Int     @default(90)
+  /// When true, refreshed content is saved as drafts for approval
+  updateRequireApproval    Boolean @default(true)
+  /// Refresh scaffolded / site pages
+  updateRefreshPages       Boolean @default(true)
+  /// Refresh existing blog posts
+  updateRefreshPosts       Boolean @default(true)
+  /// Max pages+posts to refresh per run
+  updateMaxItemsPerRun     Int     @default(5)
+
+  /// Phase 6 — social automation (off by default = Phases 1–5 unchanged)
+  socialEnabled              Boolean @default(false)
+  socialAutoGenerateOnBlog   Boolean @default(true)
+  socialAutoGenerateOnUpdate Boolean @default(false)
+  socialRequireApproval      Boolean @default(true)
+  /// Platforms to generate for (JSON array). Default applied in app code if empty.
+  socialPlatforms            Json    @default("[]")
+  /// Hours after generation before scheduled publish attempt (when auto-publish)
+  socialScheduleDelayHours   Int     @default(1)
+  /// Optional platform API tokens (leave empty to prepare content only)
+  socialXAccessToken         String?
+  socialLinkedInAccessToken  String?
+  socialLinkedInAuthorUrn    String?
+  socialFacebookPageToken    String?
+  socialFacebookPageId       String?
+  socialInstagramAccountId   String?
+
+  /// Phase 7/8 — end-to-end + management defaults
+  e2eIncludeBlog             Boolean @default(true)
+  e2eIncludeContentUpdate    Boolean @default(false)
+  e2eIncludeSocial           Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blogPosts       BlogPostRecord[]
+  contentUpdates  ContentUpdateRecord[]
+  socialPosts     SocialPostRecord[]
+  automationTasks AutomationTask[]
+}
+
+model BlogPostRecord {
+  id              String   @id @default(cuid())
+  siteConfigId    String
+  siteConfig      SiteConfig @relation(fields: [siteConfigId], references: [id], onDelete: Cascade)
+  topic           String
+  keyword         String?
+  wpPostId        Int?
+  title           String?
+  slug            String?
+  /// draft | publish | failed | approved
+  status          String   @default("draft")
+  seoPassed       Boolean?
+  requireApproval Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  socialPosts SocialPostRecord[]
+
+  @@index([siteConfigId])
+}
+
+model ContentUpdateRecord {
+  id              String   @id @default(cuid())
+  siteConfigId    String
+  siteConfig      SiteConfig @relation(fields: [siteConfigId], references: [id], onDelete: Cascade)
+  /// page | post
+  contentType     String
+  wpId            Int
+  title           String
+  reason          String
+  /// draft | publish | skipped | failed | approved
+  status          String   @default("draft")
+  requireApproval Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([siteConfigId])
+}
+
+model SocialPostRecord {
+  id              String   @id @default(cuid())
+  siteConfigId    String
+  siteConfig      SiteConfig @relation(fields: [siteConfigId], references: [id], onDelete: Cascade)
+  blogPostId      String?
+  blogPost        BlogPostRecord? @relation(fields: [blogPostId], references: [id], onDelete: SetNull)
+  /// x | linkedin | facebook | instagram
+  platform        String
+  /// Source: blog | page_update | post_update | manual
+  sourceType      String   @default("blog")
+  sourceTitle     String?
+  sourceUrl       String?
+  caption         String
+  hashtags        Json     @default("[]")
+  promotionalSnippet String?
+  /// draft | scheduled | published | failed | cancelled
+  status          String   @default("draft")
+  requireApproval Boolean  @default(true)
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  externalPostId  String?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([siteConfigId])
+  @@index([status, scheduledAt])
+}
+
+model AutomationTask {
+  id           String   @id @default(cuid())
+  siteConfigId String
+  siteConfig   SiteConfig @relation(fields: [siteConfigId], references: [id], onDelete: Cascade)
+  /// phase1 | phase2 | … | phase6 | e2e | social_publish | approve
+  phase        String
+  title        String
+  /// pending | running | completed | failed
+  status       String   @default("pending")
+  message      String?
+  meta         Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([siteConfigId, status])
 }

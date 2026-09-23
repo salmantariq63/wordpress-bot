@@ -1,0 +1,10 @@
+# https://docs.railway.com/guides/deployments
+# Connect this repo in Railway → New Project → Deploy from GitHub → uses Dockerfile by default.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+restartPolicyType = "on_failure"

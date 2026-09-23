@@ -3,8 +3,10 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SINGLE_CONFIG_ID } from "@/lib/site-config";
-
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "themes");
+import {
+  getThemeUploadDir,
+  themePublicPathForFilename,
+} from "@/lib/theme-upload-storage";
 const MAX_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
@@ -33,16 +35,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await mkdir(UPLOAD_DIR, { recursive: true });
+    const uploadDir = getThemeUploadDir();
+    await mkdir(uploadDir, { recursive: true });
 
     const safeBase = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filename = `${Date.now()}-${safeBase}`;
-    const absolutePath = path.join(UPLOAD_DIR, filename);
+    const absolutePath = path.join(uploadDir, filename);
     const buffer = Buffer.from(await file.arrayBuffer());
 
     await writeFile(absolutePath, buffer);
 
-    const publicPath = `/uploads/themes/${filename}`;
+    const publicPath = themePublicPathForFilename(filename);
 
     const existing = await prisma.siteConfig.findUnique({
       where: { id: SINGLE_CONFIG_ID },

@@ -1,17 +1,23 @@
-# Project: Grok-Powered WordPress Automation Engine (Phases 1-3)
+# Project: Grok-Powered WordPress Automation Engine (Phases 1-8)
 
 ## Core Architectural Goal
-Build a self-hosted Node.js / Next.js web application that takes a client's WordPress credentials, hosting details, custom theme zip, and business brief, and automatically builds, populates, and optimizes a full multi-page WordPress website using the xAI (Grok) API.
+Build a self-hosted Node.js / Next.js web application that takes a client's WordPress credentials, hosting details, custom theme zip, and business brief, and automatically builds, populates, and optimizes a full multi-page WordPress website using the xAI (Grok) API — then continuously generates blogs, refreshes site content, creates social posts, and provides approval controls.
 
 ## System Workflow Pipeline
 1. Dashboard Setup: User configures xAI API Key, WP REST Credentials, SSH/SFTP Credentials, Business Brief, and uploads a target WordPress Theme (.zip).
 2. Theme Deployment & Site Setup (Phase 1): Upload and activate theme zip via SFTP/WP-CLI. Verify WP REST API connection and scaffold draft pages (Home, About, Services, Contact, FAQ).
-3. Universal Content Population (Phase 2): Grok API generates responsive, theme-agnostic semantic HTML (sections, grids, headings, CTAs) per page using the business brief.
+3. Universal Content Population (Phase 2): Auto-detects content format — Gutenberg core blocks, Elementor JSON templates, Divi shortcode templates, or theme-class HTML — using the uploaded theme zip, active plugins, and live site signals. Theme still owns header/nav/footer.
 4. SEO Validation & Publishing (Phase 3): Grok inspects HTML for H1/H2 hierarchy, key phrase placement, meta title/description limits, and image alt text. Injects metadata and sets page status to "publish".
+5. Automated Blog Generation (Phase 4): Generate topics/keywords from the business brief → Grok writes structured blog HTML → SEO audit + simple auto-fixes → publish or save as WordPress draft when approval is required.
+6. Automatic Website Content Updates (Phase 5): Identify stale pages/posts by configurable age rules → regenerate/improve with Grok → SEO validation → auto-publish or draft-for-approval based on client settings.
+7. Social Media Content Automation (Phase 6): When enabled, generate platform-specific captions, hashtags, and promotional snippets from blogs/updates; prepare for schedule/publish via X, LinkedIn, Facebook, Instagram APIs when tokens are present. **Default off** so Phases 1–5 behave as before.
+8. End-to-End Orchestrator (Phase 7): Connected pipeline chaining Phases 1–6 without replacing standalone phase routes.
+9. Management & Approval (Phase 8): Dashboard controls for website status, content/blog/social approvals, scheduled posts, auto vs manual publishing, and failed automation tasks.
 
 ## Stack & Conventions
 - Framework: Next.js (App Router), TypeScript, Tailwind CSS, Lucide Icons.
 - Storage/State: Prisma with SQLite (for local credential and job state persistence).
 - AI Client: Official OpenAI SDK pointed to xAI Base URL (`https://api.x.ai/v1`) using `grok-4.6` (override via `XAI_MODEL`).
 - WordPress Protocol: Standard WP REST API (`/wp-json/wp/v2/`) using Application Passwords, combined with Node `ssh2`/`sftp` for zip theme deployments.
-- Styling Strategy: Responsive, modern theme-agnostic semantic HTML (no block-editor comments or proprietary page-builder tags).
+- Styling Strategy: Theme-aware semantic HTML fragments (reuse theme classes/palette from the uploaded zip and live stylesheets). No block-editor comments or proprietary page-builder tags. Theme chrome (header/nav/footer) is never duplicated in content.
+- Non-breaking extension: New phases are additive; existing `/api/run-pipeline`, `/api/run-blog`, and `/api/run-content-update` keep prior behavior when social is disabled.

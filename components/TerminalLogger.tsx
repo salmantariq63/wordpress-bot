@@ -25,6 +25,10 @@ function phaseTag(entry: LogMessage): string {
   if (entry.phase === "phase1") return "[PHASE 1]";
   if (entry.phase === "phase2") return "[PHASE 2]";
   if (entry.phase === "phase3") return "[PHASE 3]";
+  if (entry.phase === "phase4") return "[PHASE 4]";
+  if (entry.phase === "phase5") return "[PHASE 5]";
+  if (entry.phase === "phase6") return "[PHASE 6]";
+  if (entry.phase === "phase7") return "[PHASE 7]";
   if (entry.phase === "setup") return "[SETUP]";
   if (entry.level === "warn") return "[WARN]";
   return "[INFO]";
@@ -36,6 +40,10 @@ function tagColorClass(entry: LogMessage): string {
   if (entry.phase === "phase1") return "text-cyan-400";
   if (entry.phase === "phase2") return "text-sky-400";
   if (entry.phase === "phase3") return "text-violet-400";
+  if (entry.phase === "phase4") return "text-fuchsia-400";
+  if (entry.phase === "phase5") return "text-orange-300";
+  if (entry.phase === "phase6") return "text-pink-300";
+  if (entry.phase === "phase7") return "text-lime-300";
   if (entry.level === "warn") return "text-amber-300";
   return "text-teal-300";
 }
