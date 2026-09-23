@@ -34,6 +34,7 @@ yarn-error.log*
 # prisma
 /prisma/*.db
 /prisma/*.db-journal
+/storage/
 
 # uploads
 /public/uploads/
