@@ -32,6 +32,8 @@ This app is **not a good fit for Vercel serverless** as-is (SQLite file, theme u
 
    **Important:** Do **not** set `DATABASE_URL=file:./dev.db` on Railway — that causes `Prisma error code 14: Unable to open the database file`. Delete that variable to use the entrypoint default on your volume, or set `file:/data/prisma/prod.db` explicitly.
 
+   **Volume mount path must be exactly `/data`.** If the volume is mounted elsewhere (e.g. `/app/data`), either change the mount to `/data` or set `DATABASE_URL` to `file:<that-mount>/prisma/prod.db`. The startup script uses `RAILWAY_VOLUME_MOUNT_PATH` when present.
+
 6. **Settings** → generate a **public domain** (HTTPS).
 7. Deploy. First boot runs `prisma db push` then `npm start`.
 

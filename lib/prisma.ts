@@ -1,8 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import { prepareDatabaseUrl } from "@/lib/database-url";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
+
+prepareDatabaseUrl();
 
 function createPrismaClient() {
   return new PrismaClient({
