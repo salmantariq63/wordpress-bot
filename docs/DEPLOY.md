@@ -35,7 +35,8 @@ This app is **not a good fit for Vercel serverless** as-is (SQLite file, theme u
    **Volume mount path must be exactly `/data`.** If the volume is mounted elsewhere (e.g. `/app/data`), either change the mount to `/data` or set `DATABASE_URL` to `file:<that-mount>/prisma/prod.db`. The startup script uses `RAILWAY_VOLUME_MOUNT_PATH` when present.
 
 6. **Settings** → generate a **public domain** (HTTPS).
-7. Deploy. First boot runs `prisma db push` then `npm start`.
+7. **Settings → Build** → builder must be **Dockerfile** (or `npm start`, which runs the startup script before Next.js).
+8. Deploy. Logs should begin with `=== wordpress-bot startup ===`, then `prisma db push`, then `Ready`.
 
 ---
 

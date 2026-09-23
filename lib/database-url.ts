@@ -19,11 +19,12 @@ export function prepareDatabaseUrl(): string {
   const dataRoot = volumeMount || "/data";
   let url = process.env.DATABASE_URL?.trim() ?? "";
 
+  const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || volumeMount);
   const useVolumeDefault =
+    onRailway ||
     !url ||
     url === "file:./dev.db" ||
-    url.startsWith("file:./") ||
-    (volumeMount && url.includes("/data/") && !url.includes(volumeMount));
+    url.startsWith("file:./");
 
   if (useVolumeDefault) {
     const dbPath = path.join(dataRoot, "prisma", "prod.db");

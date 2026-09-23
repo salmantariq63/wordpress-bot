@@ -20,4 +20,4 @@ ls -la "$DATA_ROOT/prisma" 2>/dev/null || echo "Cannot list ${DATA_ROOT}/prisma"
 npx prisma db push
 touch "${DATA_ROOT}/prisma/.write-test" && rm -f "${DATA_ROOT}/prisma/.write-test"
 
-exec npm start
+exec npm run start:server
