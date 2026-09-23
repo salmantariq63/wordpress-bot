@@ -6,5 +6,6 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+startCommand = "sh scripts/docker-entrypoint.sh"
 healthcheckPath = "/"
 restartPolicyType = "on_failure"
